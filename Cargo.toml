@@ -1,0 +1,5 @@
+[package]
+
+name = "rustoci"
+version = "0.0.1"
+authors = ["Vadim Komarov <dotvad@gmail.com>"]
