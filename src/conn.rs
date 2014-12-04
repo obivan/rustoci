@@ -5,7 +5,7 @@ use ffi::{
 
 pub struct Connection {
     environment:    Environment,
-    handle:         *mut OCISvcCtx,
+    service_handle: *mut OCISvcCtx,
     server_handle:  *mut OCIServer,
     // session_handle: *mut OCISession,
 }
@@ -15,7 +15,7 @@ impl Connection {
         let env = Environment::new();
         let server_handle = oci_handle_alloc(env.handle, OCIHandleType::Server)
             .ok().expect("Cannot allocate Server handle") as *mut OCIServer;
-        let handle = oci_handle_alloc(env.handle, OCIHandleType::Service)
+        let service_handle = oci_handle_alloc(env.handle, OCIHandleType::Service)
             .ok().expect("Cannot allocate Service handle") as *mut OCISvcCtx;
         let attach_result = oci_server_attach(
             server_handle, env.error_handle, "bzzz".to_string(), OCIMode::Default
@@ -26,7 +26,7 @@ impl Connection {
         }
         Connection {
             environment:    env,
-            handle:         handle,
+            service_handle: service_handle,
             server_handle:  server_handle,
             // session_handle: sessionHandle,
         }
