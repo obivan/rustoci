@@ -505,12 +505,15 @@ pub fn oci_attr_set(handle: *mut c_void,
                     value: *mut c_void,
                     attr_type: OCIAttribute,
                     error_handle: *mut OCIError) -> Result<(), OracleError> {
+    let size: c_uint = match attr_type {
+        _ => 0,
+    };
     let res = unsafe {
         OCIAttrSet(
             handle,              // trgthndlp
             htype as c_uint,     // trghndltyp
             value,               // attributep
-            // TODO: sizeof(value) as c_uint,
+            size,                // size
             attr_type as c_uint, // attrtype
             error_handle         // errhp
         )
