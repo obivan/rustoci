@@ -1,7 +1,9 @@
 use env::Environment;
 use ffi::{
-    OCISvcCtx, OCIServer, OCISession, OCIHandleType, OCIMode, oci_handle_alloc, oci_server_attach
+    OCISvcCtx, OCIServer, OCISession, OCIHandleType, OCIMode,
+    OCIAttribute, oci_handle_alloc, oci_server_attach, oci_attr_set
 };
+use libc::c_void;
 
 pub struct Connection {
     environment:    Environment,
@@ -23,7 +25,14 @@ impl Connection {
         match attach_result {
             Ok(_) => (),
             Err(e) => panic!("oci_server_attach failed with error: {}", e),
-        }
+        };
+
+        // set attribute server context in the service context
+        match oci_attr_set(service_handle as *mut c_void, OCIHandleType::Service,
+                           server_handle as *mut c_void, OCIAttribute::Server, env.error_handle) {
+            Ok(_) => (),
+            Err(e) => panic!("oci_attr_set failed with error: {}", e),
+        };
         Connection {
             environment:    env,
             service_handle: service_handle,
