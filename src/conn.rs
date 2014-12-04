@@ -1,11 +1,13 @@
 use env::Environment;
 use ffi::{
-    OCISvcCtx, OCIServer, OCISession, OCIHandleType, OCIMode, oci_handle_alloc, oci_server_attach
+    OCISvcCtx, OCIServer, OCISession, OCIHandleType, OCIMode,
+    OCIAttribute, oci_handle_alloc, oci_server_attach, oci_attr_set
 };
+use libc::c_void;
 
 pub struct Connection {
     environment:    Environment,
-    handle:         *mut OCISvcCtx,
+    service_handle: *mut OCISvcCtx,
     server_handle:  *mut OCIServer,
     // session_handle: *mut OCISession,
 }
@@ -15,7 +17,7 @@ impl Connection {
         let env = Environment::new();
         let server_handle = oci_handle_alloc(env.handle, OCIHandleType::Server)
             .ok().expect("Cannot allocate Server handle") as *mut OCIServer;
-        let handle = oci_handle_alloc(env.handle, OCIHandleType::Service)
+        let service_handle = oci_handle_alloc(env.handle, OCIHandleType::Service)
             .ok().expect("Cannot allocate Service handle") as *mut OCISvcCtx;
         let attach_result = oci_server_attach(
             server_handle, env.error_handle, "bzzz".to_string(), OCIMode::Default
@@ -23,10 +25,17 @@ impl Connection {
         match attach_result {
             Ok(_) => (),
             Err(e) => panic!("oci_server_attach failed with error: {}", e),
-        }
+        };
+
+        // set attribute server context in the service context
+        match oci_attr_set(service_handle as *mut c_void, OCIHandleType::Service,
+                           server_handle as *mut c_void, OCIAttribute::Server, env.error_handle) {
+            Ok(_) => (),
+            Err(e) => panic!("oci_attr_set failed with error: {}", e),
+        };
         Connection {
             environment:    env,
-            handle:         handle,
+            service_handle: service_handle,
             server_handle:  server_handle,
             // session_handle: sessionHandle,
         }
