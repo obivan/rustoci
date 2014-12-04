@@ -63,7 +63,7 @@ pub enum OCIMode {
 }
 
 #[deriving(Show)]
-struct OracleError {
+pub struct OracleError {
     code:    int,
     message: String,
 }

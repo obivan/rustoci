@@ -1,4 +1,6 @@
-use ffi::{OCIEnv, OCIError, OCIMode, OCIHandleType, oci_env_nls_create, oci_handle_alloc};
+use ffi::{
+    OCIEnv, OCIError, OCIMode, OCIHandleType, OracleError, oci_env_nls_create, oci_handle_alloc
+};
 
 pub struct Environment {
     pub handle:       *mut OCIEnv,
@@ -6,11 +8,9 @@ pub struct Environment {
 }
 
 impl Environment {
-    pub fn new() -> Environment {
-        let handle = oci_env_nls_create(OCIMode::Default)
-            .ok().expect("OCIEnvNlsCreate failed");
-        let error_handle = oci_handle_alloc(handle, OCIHandleType::Error)
-            .ok().expect("Cannot allocate Error handle") as *mut OCIError;
-        Environment {handle: handle, error_handle: error_handle}
+    pub fn new() -> Result<Environment, OracleError> {
+        let handle = try!(oci_env_nls_create(OCIMode::Default));
+        let error_handle = try!(oci_handle_alloc(handle, OCIHandleType::Error)) as *mut OCIError;
+        Ok(Environment {handle: handle, error_handle: error_handle})
     }
 }
