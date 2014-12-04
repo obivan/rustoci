@@ -81,6 +81,15 @@ pub enum OCIHandleType {
     Transaction = 10, // OCI_HTYPE_TRANS
 }
 
+pub enum OCIAttribute {
+    // OCI_ATTR_SERVER
+    // Mode: READ/WRITE
+    // When read, returns the pointer to the server context attribute of the service context.
+    // When changed, sets the server context attribute of the service context.
+    // Attribute Data Type: OCIServer ** / OCIServer *
+    Server = 6,
+}
+
 #[link(name = "clntsh")]
 extern "C" {
     // Creates and initializes an environment handle for OCI functions to work under.
@@ -494,7 +503,7 @@ pub fn oci_error_get(hndlp: *mut OCIError) -> OracleError {
 pub fn oci_attr_set(handle: *mut c_void,
                     htype: OCIHandleType,
                     value: *mut c_void,
-                    attr_type: OCIAttribute, // TODO: Describe
+                    attr_type: OCIAttribute,
                     error_handle: *mut OCIError) -> Result<(), OracleError> {
     let res = unsafe {
         OCIAttrSet(
