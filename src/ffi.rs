@@ -88,6 +88,18 @@ pub enum OCIAttribute {
     // When changed, sets the server context attribute of the service context.
     // Attribute Data Type: OCIServer ** / OCIServer *
     Server = 6,
+
+    // OCI_ATTR_USERNAME
+    // Mode: READ/WRITE
+    // Specifies a user name to use for authentication.
+    // Attribute Data Type: oratext **/oratext * [oratext = c_uchar]
+    Username = 22,
+
+    // OCI_ATTR_PASSWORD
+    // Mode: WRITE
+    // Specifies a password to use for authentication.
+    // Attribute Data Type: oratext * [oratext = c_uchar]
+    Password = 23,
 }
 
 #[link(name = "clntsh")]
