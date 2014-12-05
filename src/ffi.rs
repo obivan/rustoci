@@ -100,6 +100,10 @@ pub enum OCIHandleType {
     Transaction = 10, // OCI_HTYPE_TRANS
 }
 
+pub enum OCICredentialsType {
+    Rdbms    = 1, // OCI_CRED_RDBMS
+    External = 2, // OCI_CRED_EXT
+}
 pub enum OCIAttribute {
     // OCI_ATTR_SERVER
     // Mode: READ/WRITE
