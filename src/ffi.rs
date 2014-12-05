@@ -1,5 +1,7 @@
 use libc::{c_void, c_ushort, c_ulong, c_uchar, c_uint, c_int};
 use std::c_str::CString;
+use std::error;
+use std::fmt;
 use std::ptr;
 
 #[repr(C)]
@@ -62,10 +64,27 @@ pub enum OCIMode {
     EnableNLSValidation = 0x01000000,
 }
 
-#[deriving(Show)]
 pub struct OracleError {
-    code:    int,
-    message: String,
+    code:     int,
+    message:  String,
+    location: String,
+}
+
+impl fmt::Show for OracleError {
+    fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
+        write!{f, "\n\n  Error code: {}\n  Error message: {}\n  Where: {}\n\n",
+               self.code, self.message, self.location}
+    }
+}
+
+impl error::Error for OracleError {
+    fn description(&self) -> &str {
+        "Oracle error"
+    }
+
+    fn detail(&self) -> Option<String> {
+        Some(format!("{}", self))
+    }
 }
 
 pub enum OCIHandleType {
@@ -444,7 +463,7 @@ pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
             0                // ncharset
         )
     };
-    match check_error(res, None) {
+    match check_error(res, None, "ffi::oci_env_nls_create") {
         None      => Ok(handle),
         Some(err) => Err(err),
     }
@@ -462,7 +481,7 @@ pub fn oci_handle_alloc(envh: *mut OCIEnv,
             ptr::null_mut()   // usrmempp
         )
     };
-    match check_error(res, None) {
+    match check_error(res, None, "ffi::oci_handle_alloc") {
         None => Ok(handle),
         Some(err) => Err(err),
     }
@@ -483,13 +502,13 @@ pub fn oci_server_attach(srvhp: *mut OCIServer,
             )
         }
     );
-    match check_error(res, Some(errhp)) {
+    match check_error(res, Some(errhp), "ffi::oci_server_attach") {
         None => Ok(()),
         Some(err) => Err(err),
     }
 }
 
-pub fn oci_error_get(hndlp: *mut OCIError) -> OracleError {
+pub fn oci_error_get(hndlp: *mut OCIError, location: &str) -> OracleError {
     let errc: *mut int = &mut 0;
     let buf = String::with_capacity(3072);
     let msg = buf.with_c_str(|errm|
@@ -509,7 +528,7 @@ pub fn oci_error_get(hndlp: *mut OCIError) -> OracleError {
             }
         }
     );
-    OracleError {code: unsafe { *errc }, message: msg}
+    OracleError {code: unsafe { *errc }, message: msg, location: location.to_string()}
 }
 
 pub fn oci_attr_set(handle: *mut c_void,
@@ -530,28 +549,41 @@ pub fn oci_attr_set(handle: *mut c_void,
             error_handle         // errhp
         )
     };
-    match check_error(res, Some(error_handle)) {
+    match check_error(res, Some(error_handle), "ffi::oci_attr_set") {
         None => Ok(()),
         Some(err) => Err(err),
     }
 }
 
-pub fn check_error(code: c_int, error_handle: Option<*mut OCIError>) -> Option<OracleError> {
+pub fn check_error(code: c_int,
+                   error_handle: Option<*mut OCIError>,
+                   location: &str) -> Option<OracleError> {
     let by_handle = match error_handle {
-        Some(handle) => Some(oci_error_get(handle)),
+        Some(handle) => Some(oci_error_get(handle, location)),
         None         => None,
     };
     match code {
         0     => None,
-        100   => Some(OracleError {code: code as int, message: "No data".to_string()}),
-        -2    => Some(OracleError {code: code as int, message: "Invalid handle".to_string()}),
-        99    => Some(OracleError {code: code as int, message: "Need data".to_string()}),
-        -3123 => Some(OracleError {code: code as int, message: "Still executing".to_string()}),
+        100   => Some(OracleError {
+            code: code as int, message: "No data".to_string(), location: location.to_string()
+        }),
+        -2    => Some(OracleError {
+            code: code as int, message: "Invalid handle".to_string(), location: location.to_string()
+        }),
+        99    => Some(OracleError {
+            code: code as int, message: "Need data".to_string(), location: location.to_string()
+        }),
+        -3123 => Some(OracleError {
+            code: code as int, message: "Still executing".to_string(),
+            location: location.to_string()
+        }),
         -1    => Some(by_handle.unwrap_or(OracleError {
-            code: code as int, message: "Error with no details".to_string()
+            code: code as int, message: "Error with no details".to_string(),
+            location: location.to_string()
         })),
         1     => Some(by_handle.unwrap_or(OracleError {
-            code: code as int, message: "Success with info".to_string()
+            code: code as int, message: "Success with info".to_string(),
+            location: location.to_string()
         })),
         _     => panic!("Unknown return code"),
     }
