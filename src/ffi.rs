@@ -19,6 +19,7 @@ pub struct OCIServer;
 #[repr(C)]
 pub struct OCISession;
 
+#[allow(dead_code)]
 pub enum OCIMode {
     // OCI_DEFAULT - The default value, which is non-UTF-16 encoding.
     Default = 0x00000000,
@@ -87,6 +88,7 @@ impl error::Error for OracleError {
     }
 }
 
+#[allow(dead_code)]
 pub enum OCIHandleType {
     Environment = 1,  // OCI_HTYPE_ENV
     Error       = 2,  // OCI_HTYPE_ERROR
@@ -100,11 +102,13 @@ pub enum OCIHandleType {
     Transaction = 10, // OCI_HTYPE_TRANS
 }
 
+#[allow(dead_code)]
 pub enum OCICredentialsType {
     Rdbms    = 1, // OCI_CRED_RDBMS
     External = 2, // OCI_CRED_EXT
 }
 
+#[allow(dead_code)]
 pub enum OCIAuthMode {
     Default    = 0x00000000, // OCI_DEFAULT
     Migrate    = 0x00000001, // OCI_MIGRATE
