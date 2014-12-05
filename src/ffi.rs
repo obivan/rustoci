@@ -104,6 +104,16 @@ pub enum OCICredentialsType {
     Rdbms    = 1, // OCI_CRED_RDBMS
     External = 2, // OCI_CRED_EXT
 }
+
+pub enum OCIAuthMode {
+    Default    = 0x00000000, // OCI_DEFAULT
+    Migrate    = 0x00000001, // OCI_MIGRATE
+    Sysdba     = 0x00000002, // OCI_SYSDBA
+    Sysoper    = 0x00000004, // OCI_SYSOPER
+    PrelimAuth = 0x00000008, // OCI_PRELIM_AUTH
+    StmtCache  = 0x00000040, // OCI_STMT_CACHE
+}
+
 pub enum OCIAttribute {
     // OCI_ATTR_SERVER
     // Mode: READ/WRITE
