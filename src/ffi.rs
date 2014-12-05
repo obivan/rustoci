@@ -1,4 +1,4 @@
-use libc::{c_void, c_ushort, c_ulong, c_uchar, c_uint, c_int};
+use libc::{c_void, c_ushort, c_ulong, c_uchar, c_char, c_uint, c_int};
 use std::c_str::CString;
 use std::error;
 use std::fmt;
@@ -100,6 +100,20 @@ pub enum OCIHandleType {
     Transaction = 10, // OCI_HTYPE_TRANS
 }
 
+pub enum OCICredentialsType {
+    Rdbms    = 1, // OCI_CRED_RDBMS
+    External = 2, // OCI_CRED_EXT
+}
+
+pub enum OCIAuthMode {
+    Default    = 0x00000000, // OCI_DEFAULT
+    Migrate    = 0x00000001, // OCI_MIGRATE
+    Sysdba     = 0x00000002, // OCI_SYSDBA
+    Sysoper    = 0x00000004, // OCI_SYSOPER
+    PrelimAuth = 0x00000008, // OCI_PRELIM_AUTH
+    StmtCache  = 0x00000040, // OCI_STMT_CACHE
+}
+
 pub enum OCIAttribute {
     // OCI_ATTR_SERVER
     // Mode: READ/WRITE
@@ -107,6 +121,14 @@ pub enum OCIAttribute {
     // When changed, sets the server context attribute of the service context.
     // Attribute Data Type: OCIServer ** / OCIServer *
     Server = 6,
+
+    // OCI_ATTR_SESSION
+    // Mode: READ/WRITE
+    // When read, returns the pointer to the authentication context attribute of
+    // the service context.
+    // When changed, sets the authentication context attribute of the service context.
+    // Attribute Data Type: OCISession **/ OCISession *
+    Session = 7,
 
     // OCI_ATTR_USERNAME
     // Mode: READ/WRITE
@@ -445,6 +467,119 @@ extern "C" {
         // information when there is an error.
         errhp: *mut OCIError
     ) -> c_int;
+
+    // Creates a user session and begins a user session for a given server.
+    // The OCISessionBegin() call is used to authenticate a user against the server set in the
+    // service context handle.
+    // 
+    // Check for any errors returned when trying to start a session. For example, if the password
+    // for the account has expired, an ORA-28001 error is returned.
+    // 
+    // For release 8.1 or later, OCISessionBegin() must be called for any given server handle
+    // before requests can be made against it. OCISessionBegin() only supports authenticating the
+    // user for access to the Oracle database specified by the server handle in the service context.
+    // In other words, after OCIServerAttach() is called to initialize a server handle,
+    // OCISessionBegin() must be called to authenticate the user for that given server.
+    // 
+    // When using Unicode, when the mode or the environment handle has the appropriate setting, the
+    // user name and password that have been set in the session handle usrhp should be in Unicode.
+    // Before calling this function to start a session with a user name and password, you must have
+    // called OCIAttrSet() to set these two Unicode strings into the session handle with
+    // corresponding length in bytes, because OCIAttrSet() only takes void pointers.
+    // The string buffers then are interpreted by OCISessionBegin().
+    // 
+    // When OCISessionBegin() is called for the first time for a given server handle, the user
+    // session may not be created in migratable (OCI_MIGRATE) mode.
+    // 
+    // After OCISessionBegin() has been called for a server handle, the application may call
+    // OCISessionBegin() again to initialize another user session handle with
+    // different (or the same) credentials and different (or the same) operation modes. If an
+    // application wants to authenticate a user in OCI_MIGRATE mode, the service handle must be
+    // associated with a nonmigratable user handle. The user ID of that user handle becomes the
+    // ownership ID of the migratable user session. Every migratable session must have a
+    // nonmigratable parent session.
+    // 
+    // If the OCI_MIGRATE mode is not specified, then the user session context can only be used
+    // with the same server handle set in svchp. If the OCI_MIGRATE mode is specified, then the
+    // user authentication can be set with different server handles. However, the user session
+    // context can only be used with server handles that resolve to the same database instance.
+    // Security checking is done during session switching. A session can migrate to another process
+    // only if there is a nonmigratable session currently connected to that process whose userid is
+    // the same as that of the creator's userid or its own userid.
+    // 
+    // Do not set the OCI_MIGRATE flag in the call to OCISessionBegin() when the virtual server
+    // handle points to a connection pool (OCIServerAttach() called with mode set to OCI_CPOOL).
+    // Oracle Database supports passing this flag only for compatibility reasons. Do not use
+    // the OCI_MIGRATE flag, as the perception that the user gets when using a connection pool is
+    // of sessions having their own dedicated (virtual) connections that are transparently
+    // multiplexed onto real connections.
+    // 
+    // OCI_SYSDBA, OCI_SYSOPER, and OCI_PRELIM_AUTH can only be used with a
+    // primary user session context.
+    // 
+    // To provide credentials for a call to OCISessionBegin(), two methods are supported. The first
+    // method is to provide a valid user name and password pair for database authentication in the
+    // user session handle passed to OCISessionBegin(). This involves using OCIAttrSet() to set the
+    // OCI_ATTR_USERNAME and OCI_ATTR_PASSWORD attributes on the user session handle. Then
+    // OCISessionBegin() is called with OCI_CRED_RDBMS.
+    // 
+    // When the user session handle is terminated using OCISessionEnd(), the user name and password
+    // attributes remain unchanged and thus can be reused in a future call to OCISessionBegin().
+    // Otherwise, they must be reset to new values before the next OCISessionBegin() call.
+    // 
+    // The second method is to use external credentials. No attributes need to be set on the user
+    // session handle before calling OCISessionBegin(). The credential type is OCI_CRED_EXT.
+    // This is equivalent to the Oracle7 'connect /' syntax. If values have been set for
+    // OCI_ATTR_USERNAME and OCI_ATTR_PASSWORD, then these are ignored if OCI_CRED_EXT is used.
+    // 
+    // Another way of setting credentials is to use the session ID of an authenticated user with
+    // the OCI_MIGSESSION attribute. This ID can be extracted from the session handle of an
+    // authenticated user using the OCIAttrGet() call.
+    fn OCISessionBegin(
+        // svchp (IN)
+        // A handle to a service context. There must be a valid server handle set in svchp.
+        svchp: *mut OCISvcCtx,
+
+        // errhp (IN)
+        // An error handle that you can pass to OCIErrorGet() for diagnostic information when
+        // there is an error.
+        errhp: *mut OCIError,
+
+        // usrhp (IN/OUT)
+        // A handle to a user session context, which is initialized by this call.
+        usrhp: *mut OCISession,
+
+        // credt (IN)
+        // Specifies the type of credentials to use for establishing the user session.
+        // Valid values for credt are:
+        //   OCI_CRED_RDBMS - Authenticate using a database user name and password pair as
+        //     credentials. The attributes OCI_ATTR_USERNAME and OCI_ATTR_PASSWORD should be set on
+        //     the user session context before this call.
+        //   OCI_CRED_EXT - Authenticate using external credentials.
+        //     No user name or password is provided.
+        credt: c_uint,
+
+        // mode (IN)
+        // Specifies the various modes of operation. Valid modes are:
+        //   OCI_DEFAULT - In this mode, the user session context returned can only ever be set
+        //     with the server context specified in svchp. For encoding, the server handle uses the
+        //     setting in the environment handle.
+        //   OCI_MIGRATE - In this mode, the new user session context can be set in a service
+        //     handle with a different server handle. This mode establishes the user session
+        //     context. To create a migratable session, the service handle must already be set with
+        //     a nonmigratable user session, which becomes the "creator" session of the migratable
+        //     session. That is, a migratable session must have a nonmigratable parent session.
+        //     OCI_MIGRATE should not be used when the session uses connection pool underneath.
+        //     The session migration and multiplexing happens transparently to the user.
+        //   OCI_SYSDBA - In this mode, the user is authenticated for SYSDBA access.
+        //   OCI_SYSOPER - In this mode, the user is authenticated for SYSOPER access.
+        //   OCI_PRELIM_AUTH - This mode can only be used with OCI_SYSDBA or OCI_SYSOPER to
+        //     authenticate for certain administration tasks.
+        //   OCI_STMT_CACHE - Enables statement caching with default size on the given service
+        //     handle. It is optional to pass this mode if the application is going to explicitly
+        //     set the size later using OCI_ATTR_STMTCACHESIZE on that service handle.
+        mode: c_uint
+    ) -> c_int;
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -537,6 +672,9 @@ pub fn oci_attr_set(handle: *mut c_void,
                     attr_type: OCIAttribute,
                     error_handle: *mut OCIError) -> Result<(), OracleError> {
     let size: c_uint = match attr_type {
+        OCIAttribute::Username | OCIAttribute::Password => unsafe {
+            CString::new(value as *const c_char, false).len() as c_uint
+        },
         _ => 0,
     };
     let res = unsafe {
@@ -550,6 +688,26 @@ pub fn oci_attr_set(handle: *mut c_void,
         )
     };
     match check_error(res, Some(error_handle), "ffi::oci_attr_set") {
+        None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_session_begin(service_handle: *mut OCISvcCtx,
+                         error_handle: *mut OCIError,
+                         session_handle: *mut OCISession,
+                         credentials_type: OCICredentialsType,
+                         mode: OCIAuthMode) -> Result<(), OracleError> {
+    let res = unsafe {
+        OCISessionBegin(
+            service_handle,             // svchp
+            error_handle,               // errhp
+            session_handle,             // usrhp
+            credentials_type as c_uint, // credt
+            mode as c_uint              // mode
+        )
+    };
+    match check_error(res, Some(error_handle), "ffi::oci_session_begin") {
         None => Ok(()),
         Some(err) => Err(err),
     }
