@@ -13,8 +13,9 @@ pub struct Connection {
 }
 
 impl Connection {
-    pub fn new() -> Result<Connection, OracleError> {
-
+    pub fn new(username: String,
+               password: String,
+               database: String) -> Result<Connection, OracleError> {
         // Initialize environment
         let env = try!(Environment::new());
 
@@ -33,10 +34,7 @@ impl Connection {
             oci_handle_alloc(env.handle, OCIHandleType::Session)
         ) as *mut OCISession;
 
-        try!(
-            oci_server_attach(server_handle, env.error_handle,
-                              "bzzz".to_string(), OCIMode::Default)
-        );
+        try!(oci_server_attach(server_handle, env.error_handle, database, OCIMode::Default));
 
         // Set attribute server context in the service context
         try!(
@@ -46,17 +44,17 @@ impl Connection {
 
         // Set attribute username in the session context
         try!(
-            "apps".with_c_str(|username|
+            username.with_c_str(|u|
                 oci_attr_set(session_handle as *mut c_void, OCIHandleType::Session,
-                             username as *mut c_void, OCIAttribute::Username, env.error_handle)
+                             u as *mut c_void, OCIAttribute::Username, env.error_handle)
             )
         );
 
         // Set attribute password in the session context
         try!(
-            "apps".with_c_str(|password|
+            password.with_c_str(|p|
                 oci_attr_set(session_handle as *mut c_void, OCIHandleType::Session,
-                             password as *mut c_void, OCIAttribute::Password, env.error_handle)
+                             p as *mut c_void, OCIAttribute::Password, env.error_handle)
             )
         );
 
