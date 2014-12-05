@@ -122,6 +122,14 @@ pub enum OCIAttribute {
     // Attribute Data Type: OCIServer ** / OCIServer *
     Server = 6,
 
+    // OCI_ATTR_SESSION
+    // Mode: READ/WRITE
+    // When read, returns the pointer to the authentication context attribute of
+    // the service context.
+    // When changed, sets the authentication context attribute of the service context.
+    // Attribute Data Type: OCISession **/ OCISession *
+    Session = 7,
+
     // OCI_ATTR_USERNAME
     // Mode: READ/WRITE
     // Specifies a user name to use for authentication.
