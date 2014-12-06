@@ -632,6 +632,25 @@ extern "C" {
         mode: c_uint
     ) -> c_int;
 
+    // This call explicitly deallocates a handle.
+    // This call frees up storage associated with a handle, corresponding
+    // to the type specified in the type parameter.
+    // This call returns either OCI_SUCCESS, OCI_INVALID_HANDLE, or OCI_ERROR.
+    // All handles may be explicitly deallocated. The OCI deallocates a
+    // child handle if the parent is deallocated.
+    // When a statement handle is freed, the cursor associated with the statement handle is closed, 
+    // but the actual cursor closing may be deferred to the next round-trip to the server.
+    // If the application must close the cursor immediately, you can make a server round-trip call,
+    // such as OCIServerVersion() or OCIPing(), after the OCIHandleFree() call.
+    fn OCIHandleFree(
+        // hndlp (IN)
+        // A handle allocated by OCIHandleAlloc().
+        hndlp: *mut c_void,
+
+        // type (IN)
+        // Specifies the type of storage to be freed.
+        _type: c_uint
+    ) -> c_int;
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -788,6 +807,16 @@ pub fn oci_server_detach(server_handle: *mut OCIServer,
         OCIServerDetach(server_handle, error_handle, OCIMode::Default as c_uint)
     };
     match check_error(res, Some(error_handle), "ffi::oci_server_detach") {
+        None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_handle_free(handle: *mut c_void, htype: OCIHandleType) -> Result<(), OracleError> {
+    let res = unsafe {
+        OCIHandleFree(handle, htype as c_uint)
+    };
+    match check_error(res, None, "ffi::oci_handle_free") {
         None => Ok(()),
         Some(err) => Err(err),
     }
