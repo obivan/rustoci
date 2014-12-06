@@ -19,6 +19,7 @@ pub struct OCIServer;
 #[repr(C)]
 pub struct OCISession;
 
+#[allow(dead_code)]
 pub enum OCIMode {
     // OCI_DEFAULT - The default value, which is non-UTF-16 encoding.
     Default = 0x00000000,
@@ -87,6 +88,7 @@ impl error::Error for OracleError {
     }
 }
 
+#[allow(dead_code)]
 pub enum OCIHandleType {
     Environment = 1,  // OCI_HTYPE_ENV
     Error       = 2,  // OCI_HTYPE_ERROR
@@ -100,11 +102,13 @@ pub enum OCIHandleType {
     Transaction = 10, // OCI_HTYPE_TRANS
 }
 
+#[allow(dead_code)]
 pub enum OCICredentialsType {
     Rdbms    = 1, // OCI_CRED_RDBMS
     External = 2, // OCI_CRED_EXT
 }
 
+#[allow(dead_code)]
 pub enum OCIAuthMode {
     Default    = 0x00000000, // OCI_DEFAULT
     Migrate    = 0x00000001, // OCI_MIGRATE
@@ -580,6 +584,73 @@ extern "C" {
         //     set the size later using OCI_ATTR_STMTCACHESIZE on that service handle.
         mode: c_uint
     ) -> c_int;
+
+    // Terminates a user session context created by OCISessionBegin()
+    // The user security context associated with the service context is invalidated by this call.
+    // Storage for the user session context is not freed. The transaction specified by the service
+    // context is implicitly committed. The transaction handle, if explicitly allocated, may be
+    // freed if it is not being used. Resources allocated on the server for this user are freed.
+    // The user session handle can be reused in a new call to OCISessionBegin().
+    fn OCISessionEnd(
+        // svchp (IN/OUT)
+        // The service context handle. There must be a valid server handle and user session
+        // handle associated with svchp.
+        svchp: *mut OCISvcCtx,
+
+        // errhp (IN/OUT)
+        // An error handle that you can pass to OCIErrorGet() for diagnostic information
+        // when there is an error.
+        errhp: *mut OCIError,
+
+        // usrhp (IN)
+        // Deauthenticate this user. If this parameter is passed as NULL, the user in the
+        // service context handle is deauthenticated.
+        usrhp: *mut OCISession,
+
+        // mode (IN)
+        // The only valid mode is OCI_DEFAULT.
+        mode: c_uint
+    ) -> c_int;
+
+    // Deletes an access path to a data source for OCI operations.
+    // This call deletes an access path a to data source for OCI operations.
+    // The access path was established by a call to OCIServerAttach().
+    fn OCIServerDetach(
+        // srvhp (IN)
+        // A handle to an initialized server context, which is reset to an uninitialized state.
+        // The handle is not deallocated.
+        srvhp: *mut OCIServer,
+
+        // errhp (IN/OUT)
+        // An error handle that you can pass to OCIErrorGet() for diagnostic information
+        // when there is an error.
+        errhp: *mut OCIError,
+
+        // mode (IN)
+        // Specifies the various modes of operation. The only valid mode is OCI_DEFAULT
+        // for the default mode.
+        mode: c_uint
+    ) -> c_int;
+
+    // This call explicitly deallocates a handle.
+    // This call frees up storage associated with a handle, corresponding
+    // to the type specified in the type parameter.
+    // This call returns either OCI_SUCCESS, OCI_INVALID_HANDLE, or OCI_ERROR.
+    // All handles may be explicitly deallocated. The OCI deallocates a
+    // child handle if the parent is deallocated.
+    // When a statement handle is freed, the cursor associated with the statement handle is closed, 
+    // but the actual cursor closing may be deferred to the next round-trip to the server.
+    // If the application must close the cursor immediately, you can make a server round-trip call,
+    // such as OCIServerVersion() or OCIPing(), after the OCIHandleFree() call.
+    fn OCIHandleFree(
+        // hndlp (IN)
+        // A handle allocated by OCIHandleAlloc().
+        hndlp: *mut c_void,
+
+        // type (IN)
+        // Specifies the type of storage to be freed.
+        _type: c_uint
+    ) -> c_int;
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -622,34 +693,34 @@ pub fn oci_handle_alloc(envh: *mut OCIEnv,
     }
 }
 
-pub fn oci_server_attach(srvhp: *mut OCIServer,
-                         errhp: *mut OCIError,
+pub fn oci_server_attach(server_handle: *mut OCIServer,
+                         error_handle: *mut OCIError,
                          db: String,
                          mode: OCIMode) -> Result<(), OracleError> {
     let res = db.with_c_str(|s|
         unsafe {
             OCIServerAttach(
-                srvhp,               // srvhp
-                errhp,               // errhp
+                server_handle,       // srvhp
+                error_handle,        // errhp
                 s as *const c_uchar, // dblink
                 db.len() as c_int,   // dblink_len
                 mode as c_uint       // mode
             )
         }
     );
-    match check_error(res, Some(errhp), "ffi::oci_server_attach") {
+    match check_error(res, Some(error_handle), "ffi::oci_server_attach") {
         None => Ok(()),
         Some(err) => Err(err),
     }
 }
 
-pub fn oci_error_get(hndlp: *mut OCIError, location: &str) -> OracleError {
+pub fn oci_error_get(error_handle: *mut OCIError, location: &str) -> OracleError {
     let errc: *mut int = &mut 0;
     let buf = String::with_capacity(3072);
     let msg = buf.with_c_str(|errm|
         unsafe {
             OCIErrorGet(
-                hndlp as *mut c_void,          // hndlp
+                error_handle as *mut c_void,   // hndlp
                 1,                             // recordno
                 ptr::null_mut(),               // sqlstate
                 errc as *mut c_int,            // errcodep
@@ -708,6 +779,44 @@ pub fn oci_session_begin(service_handle: *mut OCISvcCtx,
         )
     };
     match check_error(res, Some(error_handle), "ffi::oci_session_begin") {
+        None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_session_end(service_handle: *mut OCISvcCtx,
+                       error_handle: *mut OCIError,
+                       session_handle: *mut OCISession) -> Result<(), OracleError> {
+    let res = unsafe {
+        OCISessionEnd(
+            service_handle,                // svchp
+            error_handle,                  // errhp
+            session_handle,                // usrhp
+            OCIAuthMode::Default as c_uint // mode
+        )
+    };
+    match check_error(res, Some(error_handle), "ffi::oci_session_end") {
+        None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_server_detach(server_handle: *mut OCIServer,
+                         error_handle: *mut OCIError) -> Result<(), OracleError> {
+    let res = unsafe {
+        OCIServerDetach(server_handle, error_handle, OCIMode::Default as c_uint)
+    };
+    match check_error(res, Some(error_handle), "ffi::oci_server_detach") {
+        None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_handle_free(handle: *mut c_void, htype: OCIHandleType) -> Result<(), OracleError> {
+    let res = unsafe {
+        OCIHandleFree(handle, htype as c_uint)
+    };
+    match check_error(res, None, "ffi::oci_handle_free") {
         None => Ok(()),
         Some(err) => Err(err),
     }

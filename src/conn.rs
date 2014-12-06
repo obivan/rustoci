@@ -1,7 +1,8 @@
 use env::Environment;
 use ffi::{
     OCISvcCtx, OCIServer, OCISession, OCIHandleType, OCICredentialsType, OCIMode, OCIAuthMode,
-    OCIAttribute, OracleError, oci_handle_alloc, oci_server_attach, oci_attr_set, oci_session_begin
+    OCIAttribute, OracleError, oci_handle_alloc, oci_server_attach, oci_attr_set, oci_session_begin,
+    oci_session_end, oci_server_detach, oci_handle_free
 };
 use libc::c_void;
 
@@ -78,5 +79,20 @@ impl Connection {
                 session_handle: session_handle,
             }
         )
+    }
+}
+
+impl Drop for Connection {
+    fn drop(&mut self) {
+        oci_session_end(self.service_handle, self.environment.error_handle, self.session_handle)
+            .ok().expect("oci_session_end failed");
+        oci_server_detach(self.server_handle, self.environment.error_handle)
+            .ok().expect("oci_server_detach failed");
+        oci_handle_free(self.session_handle as *mut c_void, OCIHandleType::Session)
+            .ok().expect("oci_handle_free (session_handle) failed");
+        oci_handle_free(self.service_handle as *mut c_void, OCIHandleType::Service)
+            .ok().expect("oci_handle_free (service_handle) failed");
+        oci_handle_free(self.server_handle as *mut c_void, OCIHandleType::Server)
+            .ok().expect("oci_handle_free (server_handle) failed");
     }
 }
