@@ -584,6 +584,34 @@ extern "C" {
         //     set the size later using OCI_ATTR_STMTCACHESIZE on that service handle.
         mode: c_uint
     ) -> c_int;
+
+    // Terminates a user session context created by OCISessionBegin()
+    // The user security context associated with the service context is invalidated by this call.
+    // Storage for the user session context is not freed. The transaction specified by the service
+    // context is implicitly committed. The transaction handle, if explicitly allocated, may be
+    // freed if it is not being used. Resources allocated on the server for this user are freed.
+    // The user session handle can be reused in a new call to OCISessionBegin().
+    fn OCISessionEnd(
+        // svchp (IN/OUT)
+        // The service context handle. There must be a valid server handle and user session
+        // handle associated with svchp.
+        svchp: *mut OCISvcCtx,
+
+        // errhp (IN/OUT)
+        // An error handle that you can pass to OCIErrorGet() for diagnostic information
+        // when there is an error.
+        errhp: *mut OCIError,
+
+        // usrhp (IN)
+        // Deauthenticate this user. If this parameter is passed as NULL, the user in the
+        // service context handle is deauthenticated.
+        usrhp: *mut OCISession,
+
+        // mode (IN)
+        // The only valid mode is OCI_DEFAULT.
+        mode: c_uint
+    ) -> c_int;
+
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -712,6 +740,23 @@ pub fn oci_session_begin(service_handle: *mut OCISvcCtx,
         )
     };
     match check_error(res, Some(error_handle), "ffi::oci_session_begin") {
+        None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_session_end(service_handle: *mut OCISvcCtx,
+                       error_handle: *mut OCIError,
+                       session_handle: *mut OCISession) -> Result<(), OracleError> {
+    let res = unsafe {
+        OCISessionEnd(
+            service_handle,                // svchp
+            error_handle,                  // errhp
+            session_handle,                // usrhp
+            OCIAuthMode::Default as c_uint // mode
+        )
+    };
+    match check_error(res, Some(error_handle), "ffi::oci_session_end") {
         None => Ok(()),
         Some(err) => Err(err),
     }
