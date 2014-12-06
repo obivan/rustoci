@@ -612,6 +612,26 @@ extern "C" {
         mode: c_uint
     ) -> c_int;
 
+    // Deletes an access path to a data source for OCI operations.
+    // This call deletes an access path a to data source for OCI operations.
+    // The access path was established by a call to OCIServerAttach().
+    fn OCIServerDetach(
+        // srvhp (IN)
+        // A handle to an initialized server context, which is reset to an uninitialized state.
+        // The handle is not deallocated.
+        srvhp: *mut OCIServer,
+
+        // errhp (IN/OUT)
+        // An error handle that you can pass to OCIErrorGet() for diagnostic information
+        // when there is an error.
+        errhp: *mut OCIError,
+
+        // mode (IN)
+        // Specifies the various modes of operation. The only valid mode is OCI_DEFAULT
+        // for the default mode.
+        mode: c_uint
+    ) -> c_int;
+
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -757,6 +777,17 @@ pub fn oci_session_end(service_handle: *mut OCISvcCtx,
         )
     };
     match check_error(res, Some(error_handle), "ffi::oci_session_end") {
+        None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_server_detach(server_handle: *mut OCIServer,
+                         error_handle: *mut OCIError) -> Result<(), OracleError> {
+    let res = unsafe {
+        OCIServerDetach(server_handle, error_handle, OCIMode::Default as c_uint)
+    };
+    match check_error(res, Some(error_handle), "ffi::oci_server_detach") {
         None => Ok(()),
         Some(err) => Err(err),
     }
