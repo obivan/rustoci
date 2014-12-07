@@ -22,6 +22,9 @@ pub struct OCISession;
 #[repr(C)]
 pub struct OCIStmt;
 
+#[repr(C)]
+struct OCISnapshot;
+
 #[allow(dead_code)]
 pub enum OCIMode {
     // OCI_DEFAULT - The default value, which is non-UTF-16 encoding.
@@ -752,6 +755,112 @@ extern "C" {
         mode: c_uint
     ) -> c_int;
 
+    // Associates an application request with a server.
+    // This function is used to execute a prepared SQL statement. Using an execute call, the
+    // application associates a request with a server.
+    // 
+    // If a SELECT statement is executed, the description of the select list is available
+    // implicitly as a response. This description is buffered on the client side for describes,
+    // fetches, and define type conversions. Hence it is optimal to describe a select list only
+    // after an execute.
+    // 
+    // Also for SELECT statements, some results are available implicitly. Rows are received and
+    // buffered at the end of the execute. For queries with small row count, a prefetch causes
+    // memory to be released in the server if the end of fetch is reached, an optimization that may
+    // result in memory usage reduction. The set attribute call has been defined to set the number
+    // of rows to be prefetched for each result set.
+    // 
+    // For SELECT statements, at the end of the execute, the statement handle implicitly maintains
+    // a reference to the service context on which it is executed. It is the user's responsibility
+    // to maintain the integrity of the service context. The implicit reference is maintained until
+    // the statement handle is freed or the fetch is canceled or an end of
+    // fetch condition is reached.
+    // 
+    // To reexecute a DDL statement, you must prepare the statement again
+    // using OCIStmtPrepare() or OCIStmtPrepare2().
+    // 
+    // If output variables are defined for a SELECT statement before a call to OCIStmtExecute(),
+    // the number of rows specified by iters are fetched directly into the defined output buffers
+    // and additional rows equivalent to the prefetch count are prefetched. If there are no
+    // additional rows, then the fetch is complete without calling OCIStmtFetch2() or
+    // deprecated OCIStmtFetch().
+    fn OCIStmtExecute(
+        // svchp (IN/OUT)
+        // Service context handle.
+        svchp: *mut OCISvcCtx,
+
+        // stmtp (IN/OUT)
+        // A statement handle. It defines the statement and the associated data to be executed at
+        // the server. It is invalid to pass in a statement handle that has bind of data types only
+        // supported in release 8.x or later when svchp points to an Oracle7 server.
+        stmtp: *mut OCIStmt,
+
+        // errhp (IN/OUT)
+        // An error handle that you can pass to OCIErrorGet() for diagnostic information when
+        // there is an error.
+        errhp: *mut OCIError,
+
+        // iters (IN)
+        // For non-SELECT statements, the number of times this statement
+        // is executed equals iters - rowoff.
+        // For SELECT statements, if iters is nonzero, then defines must have been done for the
+        // statement handle. The execution fetches iters rows into these predefined buffers and
+        // prefetches more rows depending upon the prefetch row count. If you do not know how many
+        // rows the SELECT statement retrieves, set iters to zero.
+        // This function returns an error if iters=0 for non-SELECT statements.
+        // For array DML operations, set iters <= 32767 to get better performance.
+        iters: c_uint,
+
+        // rowoff (IN)
+        // The starting index from which the data in an array bind is relevant for this
+        // multiple row execution.
+        rowoff: c_uint,
+
+        // snap_in (IN)
+        // This parameter is optional. If it is supplied, it must point to a snapshot descriptor of
+        // type OCI_DTYPE_SNAP. The contents of this descriptor must be obtained from the snap_out
+        // parameter of a previous call. The descriptor is ignored if the SQL is not a SELECT
+        // statement. This facility allows multiple service contexts to Oracle Database to see the
+        // same consistent snapshot of the database's committed data. However, uncommitted data in
+        // one context is not visible to another context even using the same snapshot.
+        snap_in: *const OCISnapshot,
+
+        // snap_out (OUT)
+        // This parameter is optional. If it is supplied, it must point to a descriptor of type
+        // OCI_DTYPE_SNAP. This descriptor is filled in with an opaque representation that is the
+        // current Oracle Database system change number (SCN) suitable as a snap_in input to a
+        // subsequent call to OCIStmtExecute(). To avoid "snapshot too old" errors, do not use this
+        // descriptor any longer than necessary.
+        snap_out: *mut OCISnapshot,
+
+        // The modes are:
+        //   OCI_BATCH_ERRORS - See "Batch Error Mode" for information about this mode.
+        //   OCI_COMMIT_ON_SUCCESS - When a statement is executed in this mode, the current
+        //     transaction is committed after execution, if execution completes successfully.
+        //   OCI_DEFAULT - Calling OCIStmtExecute() in this mode executes the statement. It also
+        //     implicitly returns describe information about the select list.
+        //   OCI_DESCRIBE_ONLY - This mode is for users who want to describe a query before
+        //     execution. Calling OCIStmtExecute() in this mode does not execute the statement, but
+        //     it does return the select-list description. To maximize performance, Oracle
+        //     recommends that applications execute the statement in default mode and use the
+        //     implicit describe that accompanies the execution.
+        //   OCI_EXACT_FETCH - Used when the application knows in advance exactly how many rows it
+        //     is fetching. This mode turns prefetching off for Oracle Database release 8 or later
+        //     mode, and requires that defines be done before the execute call. Using this mode
+        //     cancels the cursor after the desired rows are fetched and may result in
+        //     reduced server-side resource usage.
+        //   OCI_PARSE_ONLY - This mode allows the user to parse the query before execution.
+        //     Executing in this mode parses the query and returns parse errors in the SQL, if any.
+        //     Users must note that this involves an additional round-trip to the server. To
+        //     maximize performance, Oracle recommends that the user execute the statement in the
+        //     default mode, which, parses the statement as part of the bundled operation.
+        //   OCI_STMT_SCROLLABLE_READONLY - Required for the result set to be scrollable. The
+        //     result set cannot be updated. See "Fetching Results".
+        //     This mode cannot be used with any other mode.
+        // The modes are not mutually exclusive; you can use them together,
+        // except for OCI_STMT_SCROLLABLE_READONLY.
+        mode: c_uint
+    ) -> c_int;
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -947,6 +1056,27 @@ pub fn oci_stmt_prepare2(service_handle: *mut OCISvcCtx,
     });
     match check_error(res, Some(error_handle), "ffi::oci_stmt_prepare2") {
         None => Ok(stmt_handle),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_stmt_execute(service_handle: *mut OCISvcCtx,
+                        stmt_handle: *mut OCIStmt,
+                        error_handle: *mut OCIError) -> Result<(), OracleError> {
+    let res = unsafe {
+        OCIStmtExecute(
+            service_handle,            // svchp
+            stmt_handle,               // stmtp
+            error_handle,              // errhp
+            0 as c_uint,               // iters
+            0 as c_uint,               // rowoff
+            ptr::null(),               // snap_in
+            ptr::null_mut(),           // snap_out
+            OCIMode::Default as c_uint // mode
+        )
+    };
+    match check_error(res, Some(error_handle), "ffi::oci_stmt_execute") {
+        None => Ok(()),
         Some(err) => Err(err),
     }
 }
