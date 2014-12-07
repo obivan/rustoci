@@ -22,6 +22,9 @@ pub struct OCISession;
 #[repr(C)]
 pub struct OCIStmt;
 
+#[repr(C)]
+struct OCISnapshot;
+
 #[allow(dead_code)]
 pub enum OCIMode {
     // OCI_DEFAULT - The default value, which is non-UTF-16 encoding.
@@ -119,6 +122,14 @@ pub enum OCIAuthMode {
     Sysoper    = 0x00000004, // OCI_SYSOPER
     PrelimAuth = 0x00000008, // OCI_PRELIM_AUTH
     StmtCache  = 0x00000040, // OCI_STMT_CACHE
+}
+
+enum OCISyntax {
+    NtvSyntax = 1, // OCI_NTV_SYNTAX
+}
+
+enum OCIStmtPrepare2Mode {
+    Default = 0x00000000, // OCI_DEFAULT
 }
 
 pub enum OCIAttribute {
@@ -654,6 +665,202 @@ extern "C" {
         // Specifies the type of storage to be freed.
         _type: c_uint
     ) -> c_int;
+
+    // Prepares a SQL or PL/SQL statement for execution. The user has the option of using the
+    // statement cache, if it has been enabled.
+    // 
+    // An OCI application uses this call to prepare a SQL or PL/SQL statement for execution.
+    // The OCIStmtPrepare2() call defines an application request.
+    // 
+    // The mode parameter determines whether the statement content is encoded as UTF-16 or not.
+    // The statement length is in number of code points or in number of bytes,
+    // depending on the encoding.
+    // 
+    // Although the statement handle inherits the encoding setting from the parent environment
+    // handle, the mode for this call can also change the encoding setting
+    // for the statement handle itself.
+    // 
+    // Data values for this statement initialized in subsequent bind calls are stored in a bind
+    // handle that uses settings in this statement handle as the default.
+    // 
+    // This call does not create an association between this
+    // statement handle and any particular server.
+    // 
+    // Before reexecuting a DDL statement, call this function a second time.
+    fn OCIStmtPrepare2(
+        // svchp (IN)
+        // The service context to be associated with the statement.
+        svchp: *mut OCISvcCtx,
+
+        // stmtp (OUT)
+        // Pointer to the statement handle returned.
+        stmtp: *mut *mut OCIStmt,
+
+        // errhp (IN)
+        // A pointer to the error handle for diagnostics.
+        errhp: *mut OCIError,
+
+        // stmttext (IN)
+        // The statement text. SQL or PL/SQL statement to be executed.
+        // Must be a NULL-terminated string. That is, the ending character is a number of NULL
+        // bytes, depending on the encoding. The statement must be in the encoding specified by the
+        // charset parameter of a previous call to OCIEnvNlsCreate().
+        // Always cast the parameter to (text *). After a statement has been prepared in UTF-16,
+        // the character set for the bind and define buffers default to UTF-16.
+        stmt: *const c_uchar,
+
+        // stmt_len (IN)
+        // The statement text length.
+        stmt_len: c_uint,
+
+        // key (IN)
+        // For statement caching only. The key to be used for searching the statement in the
+        // statement cache. If the key is passed in, then the statement text and other parameters
+        // are ignored, and the search is based solely on the key.
+        key: *const c_uchar,
+
+        // key_len (IN)
+        // For statement caching only. The length of the key.
+        key_len: c_uint,
+
+        // language (IN)
+        // Specifies V7, or native syntax. Possible values are as follows:
+        //   OCI_V7_SYNTAX - V7 ORACLE parsing syntax.
+        //   OCI_NTV_SYNTAX - Syntax depends upon the version of the server.
+        language: c_uint,
+
+        // mode (IN)
+        // This function can be used with and without statement caching. This is determined at the
+        // time of connection or session pool creation. If caching is enabled for a session, then
+        // all statements in the session have caching enabled, and if caching is not enabled,
+        // then all statements are not cached.
+        // The valid modes are as follows:
+        //   OCI_DEFAULT - Caching is not enabled. This is the only valid setting. If the statement
+        //   is not found in the cache, this mode allocates a new statement handle and prepares the
+        //   statement handle for execution. If the statement is not found in the cache and one of
+        //   the following circumstances applies, then the subsequent actions follow:
+        //     Only the text has been supplied: a new statement is allocated and prepared and
+        //       returned. The tag NULL. OCI_SUCCESS is returned.
+        //     Only the tag has been supplied: stmthp is NULL. OCI_ERROR is returned.
+        //     Both text and key were supplied: a new statement is allocated and prepared and
+        //       returned. The tag NULL. OCI_SUCCESS_WITH_INFO is returned, as the returned
+        //       statement differs from the requested statement in that the tag is NULL.
+        //   OCI_PREP2_CACHE_SEARCHONLY - In this case, if the statement is not found (a NULL
+        //     statement handle is returned), you must take further action. If the statement is
+        //     found, OCI_SUCCESS is returned. Otherwise, OCI_ERROR is returned.
+        //   OCI_PREP2_GET_PLSQL_WARNINGS - If warnings are enabled in the session and the PL/SQL
+        //     program is compiled with warnings, then OCI_SUCCESS_WITH_INFO is the return status
+        //     from the execution. Use OCIErrorGet() to find the new error number corresponding
+        //     to the warnings.
+        mode: c_uint
+    ) -> c_int;
+
+    // Associates an application request with a server.
+    // This function is used to execute a prepared SQL statement. Using an execute call, the
+    // application associates a request with a server.
+    // 
+    // If a SELECT statement is executed, the description of the select list is available
+    // implicitly as a response. This description is buffered on the client side for describes,
+    // fetches, and define type conversions. Hence it is optimal to describe a select list only
+    // after an execute.
+    // 
+    // Also for SELECT statements, some results are available implicitly. Rows are received and
+    // buffered at the end of the execute. For queries with small row count, a prefetch causes
+    // memory to be released in the server if the end of fetch is reached, an optimization that may
+    // result in memory usage reduction. The set attribute call has been defined to set the number
+    // of rows to be prefetched for each result set.
+    // 
+    // For SELECT statements, at the end of the execute, the statement handle implicitly maintains
+    // a reference to the service context on which it is executed. It is the user's responsibility
+    // to maintain the integrity of the service context. The implicit reference is maintained until
+    // the statement handle is freed or the fetch is canceled or an end of
+    // fetch condition is reached.
+    // 
+    // To reexecute a DDL statement, you must prepare the statement again
+    // using OCIStmtPrepare() or OCIStmtPrepare2().
+    // 
+    // If output variables are defined for a SELECT statement before a call to OCIStmtExecute(),
+    // the number of rows specified by iters are fetched directly into the defined output buffers
+    // and additional rows equivalent to the prefetch count are prefetched. If there are no
+    // additional rows, then the fetch is complete without calling OCIStmtFetch2() or
+    // deprecated OCIStmtFetch().
+    fn OCIStmtExecute(
+        // svchp (IN/OUT)
+        // Service context handle.
+        svchp: *mut OCISvcCtx,
+
+        // stmtp (IN/OUT)
+        // A statement handle. It defines the statement and the associated data to be executed at
+        // the server. It is invalid to pass in a statement handle that has bind of data types only
+        // supported in release 8.x or later when svchp points to an Oracle7 server.
+        stmtp: *mut OCIStmt,
+
+        // errhp (IN/OUT)
+        // An error handle that you can pass to OCIErrorGet() for diagnostic information when
+        // there is an error.
+        errhp: *mut OCIError,
+
+        // iters (IN)
+        // For non-SELECT statements, the number of times this statement
+        // is executed equals iters - rowoff.
+        // For SELECT statements, if iters is nonzero, then defines must have been done for the
+        // statement handle. The execution fetches iters rows into these predefined buffers and
+        // prefetches more rows depending upon the prefetch row count. If you do not know how many
+        // rows the SELECT statement retrieves, set iters to zero.
+        // This function returns an error if iters=0 for non-SELECT statements.
+        // For array DML operations, set iters <= 32767 to get better performance.
+        iters: c_uint,
+
+        // rowoff (IN)
+        // The starting index from which the data in an array bind is relevant for this
+        // multiple row execution.
+        rowoff: c_uint,
+
+        // snap_in (IN)
+        // This parameter is optional. If it is supplied, it must point to a snapshot descriptor of
+        // type OCI_DTYPE_SNAP. The contents of this descriptor must be obtained from the snap_out
+        // parameter of a previous call. The descriptor is ignored if the SQL is not a SELECT
+        // statement. This facility allows multiple service contexts to Oracle Database to see the
+        // same consistent snapshot of the database's committed data. However, uncommitted data in
+        // one context is not visible to another context even using the same snapshot.
+        snap_in: *const OCISnapshot,
+
+        // snap_out (OUT)
+        // This parameter is optional. If it is supplied, it must point to a descriptor of type
+        // OCI_DTYPE_SNAP. This descriptor is filled in with an opaque representation that is the
+        // current Oracle Database system change number (SCN) suitable as a snap_in input to a
+        // subsequent call to OCIStmtExecute(). To avoid "snapshot too old" errors, do not use this
+        // descriptor any longer than necessary.
+        snap_out: *mut OCISnapshot,
+
+        // The modes are:
+        //   OCI_BATCH_ERRORS - See "Batch Error Mode" for information about this mode.
+        //   OCI_COMMIT_ON_SUCCESS - When a statement is executed in this mode, the current
+        //     transaction is committed after execution, if execution completes successfully.
+        //   OCI_DEFAULT - Calling OCIStmtExecute() in this mode executes the statement. It also
+        //     implicitly returns describe information about the select list.
+        //   OCI_DESCRIBE_ONLY - This mode is for users who want to describe a query before
+        //     execution. Calling OCIStmtExecute() in this mode does not execute the statement, but
+        //     it does return the select-list description. To maximize performance, Oracle
+        //     recommends that applications execute the statement in default mode and use the
+        //     implicit describe that accompanies the execution.
+        //   OCI_EXACT_FETCH - Used when the application knows in advance exactly how many rows it
+        //     is fetching. This mode turns prefetching off for Oracle Database release 8 or later
+        //     mode, and requires that defines be done before the execute call. Using this mode
+        //     cancels the cursor after the desired rows are fetched and may result in
+        //     reduced server-side resource usage.
+        //   OCI_PARSE_ONLY - This mode allows the user to parse the query before execution.
+        //     Executing in this mode parses the query and returns parse errors in the SQL, if any.
+        //     Users must note that this involves an additional round-trip to the server. To
+        //     maximize performance, Oracle recommends that the user execute the statement in the
+        //     default mode, which, parses the statement as part of the bundled operation.
+        //   OCI_STMT_SCROLLABLE_READONLY - Required for the result set to be scrollable. The
+        //     result set cannot be updated. See "Fetching Results".
+        //     This mode cannot be used with any other mode.
+        // The modes are not mutually exclusive; you can use them together,
+        // except for OCI_STMT_SCROLLABLE_READONLY.
+        mode: c_uint
+    ) -> c_int;
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -700,17 +907,15 @@ pub fn oci_server_attach(server_handle: *mut OCIServer,
                          error_handle: *mut OCIError,
                          db: String,
                          mode: OCIMode) -> Result<(), OracleError> {
-    let res = db.with_c_str(|s|
-        unsafe {
-            OCIServerAttach(
-                server_handle,       // srvhp
-                error_handle,        // errhp
-                s as *const c_uchar, // dblink
-                db.len() as c_int,   // dblink_len
-                mode as c_uint       // mode
-            )
-        }
-    );
+    let res = db.with_c_str(|s| unsafe {
+        OCIServerAttach(
+            server_handle,       // srvhp
+            error_handle,        // errhp
+            s as *const c_uchar, // dblink
+            db.len() as c_int,   // dblink_len
+            mode as c_uint       // mode
+        )
+    });
     match check_error(res, Some(error_handle), "ffi::oci_server_attach") {
         None => Ok(()),
         Some(err) => Err(err),
@@ -720,23 +925,21 @@ pub fn oci_server_attach(server_handle: *mut OCIServer,
 pub fn oci_error_get(error_handle: *mut OCIError, location: &str) -> OracleError {
     let errc: *mut int = &mut 0;
     let buf = String::with_capacity(3072);
-    let msg = buf.with_c_str(|errm|
-        unsafe {
-            OCIErrorGet(
-                error_handle as *mut c_void,   // hndlp
-                1,                             // recordno
-                ptr::null_mut(),               // sqlstate
-                errc as *mut c_int,            // errcodep
-                errm as *mut c_uchar,          // bufp
-                buf.capacity() as c_uint,      // bufsiz
-                OCIHandleType::Error as c_uint // type
-            );
-            match CString::new(errm, false).as_str() {
-                Some(s) => s.trim().to_string(),
-                None    => String::new(),
-            }
+    let msg = buf.with_c_str(|errm| unsafe {
+        OCIErrorGet(
+            error_handle as *mut c_void,   // hndlp
+            1,                             // recordno
+            ptr::null_mut(),               // sqlstate
+            errc as *mut c_int,            // errcodep
+            errm as *mut c_uchar,          // bufp
+            buf.capacity() as c_uint,      // bufsiz
+            OCIHandleType::Error as c_uint // type
+        );
+        match CString::new(errm, false).as_str() {
+            Some(s) => s.trim().to_string(),
+            None    => String::new(),
         }
-    );
+    });
     OracleError {code: unsafe { *errc }, message: msg, location: location.to_string()}
 }
 
@@ -820,6 +1023,59 @@ pub fn oci_handle_free(handle: *mut c_void, htype: OCIHandleType) -> Result<(), 
         OCIHandleFree(handle, htype as c_uint)
     };
     match check_error(res, None, "ffi::oci_handle_free") {
+        None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_stmt_prepare2(service_handle: *mut OCISvcCtx,
+                         error_handle: *mut OCIError,
+                         stmt_text: String,
+                         stmt_hash: Option<String>) -> Result<*mut OCIStmt, OracleError> {
+    let mut stmt_handle = ptr::null_mut();
+    let key = match stmt_hash {
+        Some(ref s) => s.to_c_str(),
+        None        => "".to_c_str(),
+    };
+    let key_len = match stmt_hash {
+        Some(ref s) => s.len(),
+        None        => 0,
+    };
+    let res = stmt_text.with_c_str(|s| unsafe {
+        OCIStmtPrepare2(
+            service_handle,                        // svchp
+            &mut stmt_handle,                      // stmtp
+            error_handle,                          // errhp
+            s as *const c_uchar,                   // stmttext
+            stmt_text.len() as c_uint,             // stmt_len
+            key.as_ptr() as *const c_uchar,        // key
+            key_len as c_uint,                     // key_len
+            OCISyntax::NtvSyntax as c_uint,        // language
+            OCIStmtPrepare2Mode::Default as c_uint // mode
+        )
+    });
+    match check_error(res, Some(error_handle), "ffi::oci_stmt_prepare2") {
+        None => Ok(stmt_handle),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_stmt_execute(service_handle: *mut OCISvcCtx,
+                        stmt_handle: *mut OCIStmt,
+                        error_handle: *mut OCIError) -> Result<(), OracleError> {
+    let res = unsafe {
+        OCIStmtExecute(
+            service_handle,            // svchp
+            stmt_handle,               // stmtp
+            error_handle,              // errhp
+            0 as c_uint,               // iters
+            0 as c_uint,               // rowoff
+            ptr::null(),               // snap_in
+            ptr::null_mut(),           // snap_out
+            OCIMode::Default as c_uint // mode
+        )
+    };
+    match check_error(res, Some(error_handle), "ffi::oci_stmt_execute") {
         None => Ok(()),
         Some(err) => Err(err),
     }
