@@ -4,10 +4,10 @@ use stmt;
 use libc::c_void;
 
 pub struct Connection {
-    pub env:        env::Environment,
-    service_handle: *mut ffi::OCISvcCtx,
-    server_handle:  *mut ffi::OCIServer,
-    session_handle: *mut ffi::OCISession,
+    pub env:            env::Environment,
+    pub service_handle: *mut ffi::OCISvcCtx,
+    server_handle:      *mut ffi::OCIServer,
+    session_handle:     *mut ffi::OCISession,
 }
 
 impl Connection {
