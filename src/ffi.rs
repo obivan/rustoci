@@ -121,6 +121,14 @@ pub enum OCIAuthMode {
     StmtCache  = 0x00000040, // OCI_STMT_CACHE
 }
 
+enum OCISyntax {
+    NtvSyntax = 1, // OCI_NTV_SYNTAX
+}
+
+enum OCIStmtPrepare2Mode {
+    Default = 0x00000000, // OCI_DEFAULT
+}
+
 pub enum OCIAttribute {
     // OCI_ATTR_SERVER
     // Mode: READ/WRITE
@@ -654,6 +662,96 @@ extern "C" {
         // Specifies the type of storage to be freed.
         _type: c_uint
     ) -> c_int;
+
+    // Prepares a SQL or PL/SQL statement for execution. The user has the option of using the
+    // statement cache, if it has been enabled.
+    // 
+    // An OCI application uses this call to prepare a SQL or PL/SQL statement for execution.
+    // The OCIStmtPrepare2() call defines an application request.
+    // 
+    // The mode parameter determines whether the statement content is encoded as UTF-16 or not.
+    // The statement length is in number of code points or in number of bytes,
+    // depending on the encoding.
+    // 
+    // Although the statement handle inherits the encoding setting from the parent environment
+    // handle, the mode for this call can also change the encoding setting
+    // for the statement handle itself.
+    // 
+    // Data values for this statement initialized in subsequent bind calls are stored in a bind
+    // handle that uses settings in this statement handle as the default.
+    // 
+    // This call does not create an association between this
+    // statement handle and any particular server.
+    // 
+    // Before reexecuting a DDL statement, call this function a second time.
+    fn OCIStmtPrepare2(
+        // svchp (IN)
+        // The service context to be associated with the statement.
+        svchp: *mut OCISvcCtx,
+
+        // stmtp (OUT)
+        // Pointer to the statement handle returned.
+        stmtp: *mut *mut OCIStmt,
+
+        // errhp (IN)
+        // A pointer to the error handle for diagnostics.
+        errhp: *mut OCIError,
+
+        // stmttext (IN)
+        // The statement text. SQL or PL/SQL statement to be executed.
+        // Must be a NULL-terminated string. That is, the ending character is a number of NULL
+        // bytes, depending on the encoding. The statement must be in the encoding specified by the
+        // charset parameter of a previous call to OCIEnvNlsCreate().
+        // Always cast the parameter to (text *). After a statement has been prepared in UTF-16,
+        // the character set for the bind and define buffers default to UTF-16.
+        stmt: *const c_uchar,
+
+        // stmt_len (IN)
+        // The statement text length.
+        stmt_len: c_uint,
+
+        // key (IN)
+        // For statement caching only. The key to be used for searching the statement in the
+        // statement cache. If the key is passed in, then the statement text and other parameters
+        // are ignored, and the search is based solely on the key.
+        key: *const c_uchar,
+
+        // key_len (IN)
+        // For statement caching only. The length of the key.
+        key_len: c_uint,
+
+        // language (IN)
+        // Specifies V7, or native syntax. Possible values are as follows:
+        //   OCI_V7_SYNTAX - V7 ORACLE parsing syntax.
+        //   OCI_NTV_SYNTAX - Syntax depends upon the version of the server.
+        language: c_uint,
+
+        // mode (IN)
+        // This function can be used with and without statement caching. This is determined at the
+        // time of connection or session pool creation. If caching is enabled for a session, then
+        // all statements in the session have caching enabled, and if caching is not enabled,
+        // then all statements are not cached.
+        // The valid modes are as follows:
+        //   OCI_DEFAULT - Caching is not enabled. This is the only valid setting. If the statement
+        //   is not found in the cache, this mode allocates a new statement handle and prepares the
+        //   statement handle for execution. If the statement is not found in the cache and one of
+        //   the following circumstances applies, then the subsequent actions follow:
+        //     Only the text has been supplied: a new statement is allocated and prepared and
+        //       returned. The tag NULL. OCI_SUCCESS is returned.
+        //     Only the tag has been supplied: stmthp is NULL. OCI_ERROR is returned.
+        //     Both text and key were supplied: a new statement is allocated and prepared and
+        //       returned. The tag NULL. OCI_SUCCESS_WITH_INFO is returned, as the returned
+        //       statement differs from the requested statement in that the tag is NULL.
+        //   OCI_PREP2_CACHE_SEARCHONLY - In this case, if the statement is not found (a NULL
+        //     statement handle is returned), you must take further action. If the statement is
+        //     found, OCI_SUCCESS is returned. Otherwise, OCI_ERROR is returned.
+        //   OCI_PREP2_GET_PLSQL_WARNINGS - If warnings are enabled in the session and the PL/SQL
+        //     program is compiled with warnings, then OCI_SUCCESS_WITH_INFO is the return status
+        //     from the execution. Use OCIErrorGet() to find the new error number corresponding
+        //     to the warnings.
+        mode: c_uint
+    ) -> c_int;
+
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -821,6 +919,38 @@ pub fn oci_handle_free(handle: *mut c_void, htype: OCIHandleType) -> Result<(), 
     };
     match check_error(res, None, "ffi::oci_handle_free") {
         None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_stmt_prepare2(service_handle: *mut OCISvcCtx,
+                         error_handle: *mut OCIError,
+                         stmt_text: String,
+                         stmt_hash: Option<String>) -> Result<*mut OCIStmt, OracleError> {
+    let mut stmt_handle = ptr::null_mut();
+    let key = match stmt_hash {
+        Some(ref s) => s.to_c_str(),
+        None        => "".to_c_str(),
+    };
+    let key_len = match stmt_hash {
+        Some(ref s) => s.len(),
+        None        => 0,
+    };
+    let res = stmt_text.with_c_str(|s| unsafe {
+        OCIStmtPrepare2(
+            service_handle,                        // svchp
+            &mut stmt_handle,                      // stmtp
+            error_handle,                          // errhp
+            s as *const c_uchar,                   // stmttext
+            stmt_text.len() as c_uint,             // stmt_len
+            key.as_ptr() as *const c_uchar,        // key
+            key_len as c_uint,                     // key_len
+            OCISyntax::NtvSyntax as c_uint,        // language
+            OCIStmtPrepare2Mode::Default as c_uint // mode
+        )
+    });
+    match check_error(res, Some(error_handle), "ffi::oci_stmt_prepare2") {
+        None => Ok(stmt_handle),
         Some(err) => Err(err),
     }
 }
