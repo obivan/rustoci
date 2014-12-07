@@ -19,6 +19,9 @@ pub struct OCIServer;
 #[repr(C)]
 pub struct OCISession;
 
+#[repr(C)]
+pub struct OCIStmt;
+
 #[allow(dead_code)]
 pub enum OCIMode {
     // OCI_DEFAULT - The default value, which is non-UTF-16 encoding.

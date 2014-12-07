@@ -1,9 +1,10 @@
 use env;
 use ffi;
+use stmt;
 use libc::c_void;
 
 pub struct Connection {
-    env:            env::Environment,
+    pub env:        env::Environment,
     service_handle: *mut ffi::OCISvcCtx,
     server_handle:  *mut ffi::OCIServer,
     session_handle: *mut ffi::OCISession,
@@ -80,6 +81,10 @@ impl Connection {
                 session_handle: session_handle,
             }
         )
+    }
+
+    pub fn new_statement(self) -> Result<stmt::Statement, ffi::OracleError> {
+        stmt::Statement::new(self)
     }
 }
 
