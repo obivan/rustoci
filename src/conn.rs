@@ -83,8 +83,8 @@ impl Connection {
         )
     }
 
-    pub fn new_statement(self) -> Result<stmt::Statement, ffi::OracleError> {
-        stmt::Statement::new(self)
+    pub fn new_statement(self, stmt_text: String) -> Result<stmt::Statement, ffi::OracleError> {
+        stmt::Statement::new(self, stmt_text)
     }
 }
 
