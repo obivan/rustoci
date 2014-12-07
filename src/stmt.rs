@@ -22,4 +22,11 @@ impl Statement {
         Ok(Statement {conn: self.conn, stmt_handle: stmt_handle})
     }
 
+    pub fn execute(self) -> Result<Statement, ffi::OracleError> {
+        try!(
+            ffi::oci_stmt_execute(self.conn.service_handle, self.stmt_handle,
+                                  self.conn.env.error_handle)
+        );
+        Ok(self)
+    }
 }
