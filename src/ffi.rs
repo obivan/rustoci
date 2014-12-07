@@ -798,17 +798,15 @@ pub fn oci_server_attach(server_handle: *mut OCIServer,
                          error_handle: *mut OCIError,
                          db: String,
                          mode: OCIMode) -> Result<(), OracleError> {
-    let res = db.with_c_str(|s|
-        unsafe {
-            OCIServerAttach(
-                server_handle,       // srvhp
-                error_handle,        // errhp
-                s as *const c_uchar, // dblink
-                db.len() as c_int,   // dblink_len
-                mode as c_uint       // mode
-            )
-        }
-    );
+    let res = db.with_c_str(|s| unsafe {
+        OCIServerAttach(
+            server_handle,       // srvhp
+            error_handle,        // errhp
+            s as *const c_uchar, // dblink
+            db.len() as c_int,   // dblink_len
+            mode as c_uint       // mode
+        )
+    });
     match check_error(res, Some(error_handle), "ffi::oci_server_attach") {
         None => Ok(()),
         Some(err) => Err(err),
@@ -818,23 +816,21 @@ pub fn oci_server_attach(server_handle: *mut OCIServer,
 pub fn oci_error_get(error_handle: *mut OCIError, location: &str) -> OracleError {
     let errc: *mut int = &mut 0;
     let buf = String::with_capacity(3072);
-    let msg = buf.with_c_str(|errm|
-        unsafe {
-            OCIErrorGet(
-                error_handle as *mut c_void,   // hndlp
-                1,                             // recordno
-                ptr::null_mut(),               // sqlstate
-                errc as *mut c_int,            // errcodep
-                errm as *mut c_uchar,          // bufp
-                buf.capacity() as c_uint,      // bufsiz
-                OCIHandleType::Error as c_uint // type
-            );
-            match CString::new(errm, false).as_str() {
-                Some(s) => s.trim().to_string(),
-                None    => String::new(),
-            }
+    let msg = buf.with_c_str(|errm| unsafe {
+        OCIErrorGet(
+            error_handle as *mut c_void,   // hndlp
+            1,                             // recordno
+            ptr::null_mut(),               // sqlstate
+            errc as *mut c_int,            // errcodep
+            errm as *mut c_uchar,          // bufp
+            buf.capacity() as c_uint,      // bufsiz
+            OCIHandleType::Error as c_uint // type
+        );
+        match CString::new(errm, false).as_str() {
+            Some(s) => s.trim().to_string(),
+            None    => String::new(),
         }
-    );
+    });
     OracleError {code: unsafe { *errc }, message: msg, location: location.to_string()}
 }
 
