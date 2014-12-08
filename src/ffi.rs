@@ -861,6 +861,34 @@ extern "C" {
         // except for OCI_STMT_SCROLLABLE_READONLY.
         mode: c_uint
     ) -> c_int;
+
+    // Releases the statement handle obtained by a call to OCIStmtPrepare2().
+    fn OCIStmtRelease(
+        // stmtp (IN/OUT)
+        // The statement handle returned by OCIStmtPrepare2()
+        stmtp: *mut OCIStmt,
+
+        // errhp (IN)
+        // The error handle used for diagnostics.
+        errhp: *mut OCIError,
+
+        // key (IN)
+        // Only valid for statement caching. The key to be associated with the statement in the
+        // cache. This is a SQL string passed in by the caller. If a NULL key is passed in,
+        // the statement is not tagged.
+        key: *const c_uchar,
+
+        // keylen (IN)
+        // Only valid for statement caching. The length of the key.
+        key_len: c_uint,
+
+        // mode (IN)
+        // The valid modes are:
+        //   OCI_DEFAULT
+        //   OCI_STRLS_CACHE_DELETE - Only valid for statement caching. The statement is not
+        //     kept in the cache anymore.
+        mode: c_uint)
+     -> c_int;
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -1070,6 +1098,24 @@ pub fn oci_stmt_execute(service_handle: *mut OCISvcCtx,
         )
     };
     match check_error(res, Some(error_handle), "ffi::oci_stmt_execute") {
+        None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_stmt_release(stmt_handle: *mut OCIStmt,
+                        error_handle: *mut OCIError,
+                        stmt_hash: &String) -> Result<(), OracleError> {
+    let res = stmt_hash.with_c_str(|hash| unsafe {
+        OCIStmtRelease(
+            stmt_handle,               // stmtp
+            error_handle,              // errhp
+            hash as *const c_uchar,    // key
+            stmt_hash.len() as c_uint, // keylen
+            OCIMode::Default as c_uint // mode
+        )
+    });
+    match check_error(res, Some(error_handle), "ffi::oci_stmt_release") {
         None => Ok(()),
         Some(err) => Err(err),
     }
