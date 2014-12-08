@@ -1,6 +1,9 @@
 extern crate libc;
 
+pub use conn::Connection;
+pub use stmt::Statement;
+
 mod ffi;
 mod env;
-pub mod stmt;
-pub mod conn;
+mod conn;
+mod stmt;
