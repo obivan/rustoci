@@ -861,6 +861,34 @@ extern "C" {
         // except for OCI_STMT_SCROLLABLE_READONLY.
         mode: c_uint
     ) -> c_int;
+
+    // Releases the statement handle obtained by a call to OCIStmtPrepare2().
+    fn OCIStmtRelease(
+        // stmtp (IN/OUT)
+        // The statement handle returned by OCIStmtPrepare2()
+        stmtp: *mut OCIStmt,
+
+        // errhp (IN)
+        // The error handle used for diagnostics.
+        errhp: *mut OCIError,
+
+        // key (IN)
+        // Only valid for statement caching. The key to be associated with the statement in the
+        // cache. This is a SQL string passed in by the caller. If a NULL key is passed in,
+        // the statement is not tagged.
+        key: *const c_uchar,
+
+        // keylen (IN)
+        // Only valid for statement caching. The length of the key.
+        key_len: c_uint,
+
+        // mode (IN)
+        // The valid modes are:
+        //   OCI_DEFAULT
+        //   OCI_STRLS_CACHE_DELETE - Only valid for statement caching. The statement is not
+        //     kept in the cache anymore.
+        mode: c_uint)
+     -> c_int;
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -1030,30 +1058,24 @@ pub fn oci_handle_free(handle: *mut c_void, htype: OCIHandleType) -> Result<(), 
 
 pub fn oci_stmt_prepare2(service_handle: *mut OCISvcCtx,
                          error_handle: *mut OCIError,
-                         stmt_text: String,
-                         stmt_hash: Option<String>) -> Result<*mut OCIStmt, OracleError> {
+                         stmt_text: &String,
+                         stmt_hash: &String) -> Result<*mut OCIStmt, OracleError> {
     let mut stmt_handle = ptr::null_mut();
-    let key = match stmt_hash {
-        Some(ref s) => s.to_c_str(),
-        None        => "".to_c_str(),
-    };
-    let key_len = match stmt_hash {
-        Some(ref s) => s.len(),
-        None        => 0,
-    };
-    let res = stmt_text.with_c_str(|s| unsafe {
-        OCIStmtPrepare2(
-            service_handle,                        // svchp
-            &mut stmt_handle,                      // stmtp
-            error_handle,                          // errhp
-            s as *const c_uchar,                   // stmttext
-            stmt_text.len() as c_uint,             // stmt_len
-            key.as_ptr() as *const c_uchar,        // key
-            key_len as c_uint,                     // key_len
-            OCISyntax::NtvSyntax as c_uint,        // language
-            OCIStmtPrepare2Mode::Default as c_uint // mode
-        )
-    });
+    let res = stmt_text.with_c_str(|stmt|
+        stmt_hash.with_c_str(|hash| unsafe {
+            OCIStmtPrepare2(
+                service_handle,                        // svchp
+                &mut stmt_handle,                      // stmtp
+                error_handle,                          // errhp
+                stmt as *const c_uchar,                // stmttext
+                stmt_text.len() as c_uint,             // stmt_len
+                hash as *const c_uchar,                // key
+                stmt_hash.len() as c_uint,             // key_len
+                OCISyntax::NtvSyntax as c_uint,        // language
+                OCIStmtPrepare2Mode::Default as c_uint // mode
+            )
+        })
+    );
     match check_error(res, Some(error_handle), "ffi::oci_stmt_prepare2") {
         None => Ok(stmt_handle),
         Some(err) => Err(err),
@@ -1076,6 +1098,24 @@ pub fn oci_stmt_execute(service_handle: *mut OCISvcCtx,
         )
     };
     match check_error(res, Some(error_handle), "ffi::oci_stmt_execute") {
+        None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_stmt_release(stmt_handle: *mut OCIStmt,
+                        error_handle: *mut OCIError,
+                        stmt_hash: &String) -> Result<(), OracleError> {
+    let res = stmt_hash.with_c_str(|hash| unsafe {
+        OCIStmtRelease(
+            stmt_handle,               // stmtp
+            error_handle,              // errhp
+            hash as *const c_uchar,    // key
+            stmt_hash.len() as c_uint, // keylen
+            OCIMode::Default as c_uint // mode
+        )
+    });
+    match check_error(res, Some(error_handle), "ffi::oci_stmt_release") {
         None => Ok(()),
         Some(err) => Err(err),
     }
