@@ -9,7 +9,7 @@ Example usage:
 ```
 extern crate rustoci;
 
-use rustoci::conn::Connection;
+use rustoci::Connection;
 
 fn main() {
     let user = "apps".to_string();
