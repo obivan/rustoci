@@ -27,3 +27,10 @@ impl Statement {
         Ok(self)
     }
 }
+
+impl Drop for Statement {
+    fn drop(&mut self) {
+        ffi::oci_stmt_release(self.stmt_handle, self.conn.env.error_handle, &self.stmt_hash)
+            .ok().expect("oci_stmt_release failed");
+    }
+}
