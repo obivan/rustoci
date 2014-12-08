@@ -1030,30 +1030,24 @@ pub fn oci_handle_free(handle: *mut c_void, htype: OCIHandleType) -> Result<(), 
 
 pub fn oci_stmt_prepare2(service_handle: *mut OCISvcCtx,
                          error_handle: *mut OCIError,
-                         stmt_text: String,
-                         stmt_hash: Option<String>) -> Result<*mut OCIStmt, OracleError> {
+                         stmt_text: &String,
+                         stmt_hash: &String) -> Result<*mut OCIStmt, OracleError> {
     let mut stmt_handle = ptr::null_mut();
-    let key = match stmt_hash {
-        Some(ref s) => s.to_c_str(),
-        None        => "".to_c_str(),
-    };
-    let key_len = match stmt_hash {
-        Some(ref s) => s.len(),
-        None        => 0,
-    };
-    let res = stmt_text.with_c_str(|s| unsafe {
-        OCIStmtPrepare2(
-            service_handle,                        // svchp
-            &mut stmt_handle,                      // stmtp
-            error_handle,                          // errhp
-            s as *const c_uchar,                   // stmttext
-            stmt_text.len() as c_uint,             // stmt_len
-            key.as_ptr() as *const c_uchar,        // key
-            key_len as c_uint,                     // key_len
-            OCISyntax::NtvSyntax as c_uint,        // language
-            OCIStmtPrepare2Mode::Default as c_uint // mode
-        )
-    });
+    let res = stmt_text.with_c_str(|stmt|
+        stmt_hash.with_c_str(|hash| unsafe {
+            OCIStmtPrepare2(
+                service_handle,                        // svchp
+                &mut stmt_handle,                      // stmtp
+                error_handle,                          // errhp
+                stmt as *const c_uchar,                // stmttext
+                stmt_text.len() as c_uint,             // stmt_len
+                hash as *const c_uchar,                // key
+                stmt_hash.len() as c_uint,             // key_len
+                OCISyntax::NtvSyntax as c_uint,        // language
+                OCIStmtPrepare2Mode::Default as c_uint // mode
+            )
+        })
+    );
     match check_error(res, Some(error_handle), "ffi::oci_stmt_prepare2") {
         None => Ok(stmt_handle),
         Some(err) => Err(err),
