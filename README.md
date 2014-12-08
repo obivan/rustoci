@@ -1,6 +1,8 @@
 rustoci
 =======
 
+**Library under development. Not ready for use.**
+
 Rust bindings for Oracle Call Interface
 
 You need to install `Oracle Instant Client` libraries before you can link your program with this library.
