@@ -161,6 +161,10 @@ pub enum OCIAttribute {
     Password = 23,
 }
 
+enum OCIDescriptorType {
+    Parameter = 53, // OCI_DTYPE_PARAM
+}
+
 #[link(name = "clntsh")]
 extern "C" {
     // Creates and initializes an environment handle for OCI functions to work under.
@@ -924,6 +928,68 @@ extern "C" {
         // OCI_ERROR is returned if there are no parameter descriptors for this position.
         pos: c_uint
     ) -> c_int;
+
+    // Gets the value of an attribute of a handle.
+    // This call is used to get a particular attribute of a handle. OCI_DTYPE_PARAM is used to do
+    // implicit and explicit describes. The parameter descriptor is also used in direct path
+    // loading. For implicit describes, the parameter descriptor has the column description for
+    // each select list. For explicit describes, the parameter descriptor has the describe
+    // information for each schema object that you are trying to describe. If the top-level
+    // parameter descriptor has an attribute that is itself a descriptor, use OCI_ATTR_PARAM as the
+    // attribute type in the subsequent call to OCIAttrGet() to get the Unicode information in an
+    // environment or statement handle.
+    // 
+    // A function closely related to OCIAttrGet() is OCIDescribeAny(), which is a generic describe
+    // call that describes existing schema objects: tables, views, synonyms, procedures, functions,
+    // packages, sequences, and types. As a result of this call, the describe handle is populated
+    // with the object-specific attributes that can be obtained through an OCIAttrGet() call.
+    // 
+    // Then an OCIParamGet() call on the describe handle returns a parameter descriptor for a
+    // specified position. Parameter positions begin with 1. Calling OCIAttrGet() on the parameter
+    // descriptor returns the specific attributes of a stored procedure or function parameter or a
+    // table column descriptor. These subsequent calls do not need an extra round-trip to the
+    // server because the entire schema object description is cached on the client side by
+    // OCIDescribeAny(). Calling OCIAttrGet() on the describe handle can also return the total
+    // number of positions.
+    // 
+    // In UTF-16 mode, particularly when executing a loop, try to reuse the same pointer variable
+    // corresponding to an attribute and copy the contents to local variables after OCIAttrGet() is
+    // called. If multiple pointers are used for the same attribute, a memory leak can occur.
+    fn OCIAttrGet(
+        // trgthndlp (IN)
+        // Pointer to a handle type. The actual handle can be a statement handle, a session handle,
+        // and so on. When this call is used to get encoding, users are allowed to check against
+        // either an environment or statement handle.
+        trgthndlp: *const c_void,
+
+        // trghndltyp (IN)
+        // The handle type. Valid types are:
+        //   OCI_DTYPE_PARAM, for a parameter descriptor
+        //   OCI_HTYPE_STMT, for a statement handle
+        //   Any handle type in OCIHandleType enum or any descriptor in OCIDescriptorType enum.
+        trghndltyp: c_uint,
+
+        // attributep (OUT)
+        // Pointer to the storage for an attribute value. Is in the encoding specified by the
+        // charset parameter of a previous call to OCIEnvNlsCreate().
+        attributep: *mut c_void,
+
+        // sizep (OUT)
+        // The size of the attribute value, always in bytes because attributep is a void pointer.
+        // This can be passed as NULL for most attributes because the sizes of non-string
+        // attributes are already known by the OCI library. For text* parameters, a pointer to a
+        // ub4 must be passed in to get the length of the string.
+        sizep: *mut c_uint,
+
+        // attrtype (IN)
+        // The type of attribute being retrieved.
+        attrtype: c_uint,
+
+        // errhp (IN/OUT)
+        // An error handle that you can pass to OCIErrorGet() for diagnostic information when
+        // there is an error.
+        errhp: *mut OCIError
+    ) -> c_int;
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -1171,6 +1237,27 @@ pub fn oci_param_get(stmt_handle: *mut OCIStmt,
     };
     match check_error(res, Some(error_handle), "ffi::oci_param_get") {
         None => Ok(parameter_descriptor),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_attr_get(attr_handle: *mut c_void,
+                    error_handle: *mut OCIError,
+                    attr_type: OCIAttribute) -> Result<(*mut c_void, int), OracleError> {
+    let attribute = ptr::null_mut();
+    let mut attribute_size = 0;
+    let res = unsafe {
+        OCIAttrGet(
+            attr_handle as *const _,                // trgthndlp
+            OCIDescriptorType::Parameter as c_uint, // trghndltyp
+            attribute,                              // attributep
+            &mut attribute_size,                    // sizep
+            attr_type as c_uint,                    // attrtype
+            error_handle                            // errhp
+        )
+    };
+    match check_error(res, Some(error_handle), "ffi::oci_attr_get") {
+        None => Ok((attribute, attribute_size as int)),
         Some(err) => Err(err),
     }
 }
