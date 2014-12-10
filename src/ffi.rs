@@ -887,8 +887,43 @@ extern "C" {
         //   OCI_DEFAULT
         //   OCI_STRLS_CACHE_DELETE - Only valid for statement caching. The statement is not
         //     kept in the cache anymore.
-        mode: c_uint)
-     -> c_int;
+        mode: c_uint
+    ) -> c_int;
+
+    // This call returns a descriptor of a parameter specified by position in the describe handle
+    // or statement handle. Parameter descriptors are always allocated internally by the OCI
+    // library. They can be freed using OCIDescriptorFree(). For example, if you fetch the same
+    // column metadata for every execution of a statement, then the program leaks memory unless you
+    // explicitly free the parameter descriptor between each call to OCIParamGet().
+    fn OCIParamGet(
+        // hndlp (IN)
+        // A statement handle or describe handle. The OCIParamGet() function returns a
+        // parameter descriptor for this handle.
+        hndlp: *const c_void,
+
+        // htype (IN)
+        // The type of the handle passed in the hndlp parameter. Valid types are:
+        //   OCI_DTYPE_PARAM, for a parameter descriptor
+        //   OCI_HTYPE_COMPLEXOBJECT, for a complex object retrieval handle
+        //   OCI_HTYPE_STMT, for a statement handle
+        htype: c_uint,
+
+        // errhp (IN/OUT)
+        // An error handle that you can pass to OCIErrorGet() for diagnostic information when
+        // there is an error.
+        errhp: *mut OCIError,
+
+        // parmdpp (OUT)
+        // A descriptor of the parameter at the position given in the pos parameter,
+        // of handle type OCI_DTYPE_PARAM.
+        parmdpp: *mut *mut c_void,
+
+        // pos (IN)
+        // Position number in the statement handle or describe handle. A parameter descriptor is
+        // returned for this position.
+        // OCI_ERROR is returned if there are no parameter descriptors for this position.
+        pos: c_uint
+    ) -> c_int;
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -1117,6 +1152,25 @@ pub fn oci_stmt_release(stmt_handle: *mut OCIStmt,
     });
     match check_error(res, Some(error_handle), "ffi::oci_stmt_release") {
         None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_param_get(stmt_handle: *mut OCIStmt,
+                     error_handle: *mut OCIError,
+                     position: uint) -> Result<*mut c_void, OracleError> {
+    let mut parameter_descriptor = ptr::null_mut();
+    let res = unsafe {
+        OCIParamGet(
+            stmt_handle as *const _,            // hndlp
+            OCIHandleType::Statement as c_uint, // htype
+            error_handle,                       // errhp
+            &mut parameter_descriptor,          // parmdpp
+            position as c_uint                  // pos
+        )
+    };
+    match check_error(res, Some(error_handle), "ffi::oci_param_get") {
+        None => Ok(parameter_descriptor),
         Some(err) => Err(err),
     }
 }
