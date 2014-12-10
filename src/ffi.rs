@@ -161,6 +161,7 @@ pub enum OCIAttribute {
     Password = 23,
 }
 
+#[allow(dead_code)]
 enum OCIDescriptorType {
     Parameter = 53, // OCI_DTYPE_PARAM
 }
