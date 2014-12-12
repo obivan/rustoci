@@ -166,6 +166,19 @@ enum OCIDescriptorType {
     Parameter = 53, // OCI_DTYPE_PARAM
 }
 
+#[allow(dead_code)]
+enum OCIDescribeAttribute {
+    DataSize = 1,     // OCI_ATTR_DATA_SIZE maximum size of the data
+    DataType = 2,     // OCI_ATTR_DATA_TYPE the SQL type of the column/argument
+    DisplaySize = 3,  // OCI_ATTR_DISP_SIZE the display size
+    Name = 4,         // OCI_ATTR_NAME      the name of the column/argument
+    Precision = 5,    // OCI_ATTR_PRECISION precision if number type
+    Scale = 6,        // OCI_ATTR_SCALE     scale if number type
+    IsNull = 7,       // OCI_ATTR_IS_NULL   is it null ?
+    CharUsed = 285,   // OCI_ATTR_CHAR_USED char length semantics
+    CharLength = 286, // OCI_ATTR_CHAR_SIZE char length
+}
+
 #[link(name = "clntsh")]
 extern "C" {
     // Creates and initializes an environment handle for OCI functions to work under.
@@ -1244,7 +1257,7 @@ pub fn oci_param_get(stmt_handle: *mut OCIStmt,
 
 pub fn oci_attr_get(attr_handle: *mut c_void,
                     error_handle: *mut OCIError,
-                    attr_type: OCIAttribute) -> Result<(*mut c_void, int), OracleError> {
+                    attr_type: OCIDescribeAttribute) -> Result<(*mut c_void, int), OracleError> {
     let attribute = ptr::null_mut();
     let mut attribute_size = 0;
     let res = unsafe {
