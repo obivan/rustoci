@@ -179,6 +179,29 @@ enum OCIDescribeAttribute {
     CharLength = 286, // OCI_ATTR_CHAR_SIZE char length
 }
 
+#[allow(dead_code)]
+enum OCIDataType {
+    Char = 1,                   // SQLT_CHR           (ORANET TYPE) character string
+    Date = 184,                 // SQLT_DATE          ANSI Date
+    Timestamp = 187,            // SQLT_TIMESTAMP     TIMESTAMP
+    TimestampWithTz  = 188,     // SQLT_TIMESTAMP_TZ  TIMESTAMP WITH TIME ZONE
+    TimestampWithLocalTz = 232, // SQLT_TIMESTAMP_LTZ TIMESTAMP WITH LOCAL TZ
+    IntervalYearToMonth = 189,  // SQLT_INTERVAL_YM   INTERVAL YEAR TO MONTH
+    IntervalDayToSecond = 190,  // SQLT_INTERVAL_DS   INTERVAL DAY TO SECOND
+    Clob = 112,                 // SQLT_CLOB          character lob
+    Blob = 113,                 // SQLT_BLOB          binary lob
+    Int = 3,                    // SQLT_INT           (ORANET TYPE) integer
+    Uint = 68,                  // SQLT_UIN           unsigned integer
+    Float = 4,                  // SQLT_FLT           (ORANET TYPE) Floating point number
+    PackedDecimalNumber = 7,    // SQLT_PDN           (ORANET TYPE) Packed Decimal Numeric
+    Binary = 23,                // SQLT_BIN           binary data(DTYBIN)
+    Numeric = 2,                // SQLT_NUM           (ORANET TYPE) oracle numeric
+    NamedObject = 108,          // SQLT_NTY           named object type
+    Ref = 110,                  // SQLT_REF           ref type
+    OCIString = 155,            // SQLT_VST           OCIString type
+    NumericWithLength = 6,      // SQLT_VNU           NUM with preceding length byte
+}
+
 #[link(name = "clntsh")]
 extern "C" {
     // Creates and initializes an environment handle for OCI functions to work under.
