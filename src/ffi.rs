@@ -1073,13 +1073,14 @@ pub fn oci_server_attach(server_handle: *mut OCIServer,
                          error_handle: *mut OCIError,
                          db: String,
                          mode: OCIMode) -> Result<(), OracleError> {
+    let mode_uint = mode as c_uint;
     let res = db.with_c_str(|s| unsafe {
         OCIServerAttach(
             server_handle,       // srvhp
             error_handle,        // errhp
             s as *const c_uchar, // dblink
             db.len() as c_int,   // dblink_len
-            mode as c_uint       // mode
+            mode_uint            // mode
         )
     });
     match check_error(res, Some(error_handle), "ffi::oci_server_attach") {
