@@ -1,5 +1,5 @@
 use libc::{c_void, c_ushort, c_ulong, c_uchar, c_char, c_uint, c_int};
-use std::c_str::CString;
+use std::ffi::{CString, c_str_to_bytes};
 use std::error;
 use std::fmt;
 use std::ptr;
@@ -72,12 +72,12 @@ pub enum OCIMode {
 }
 
 pub struct OracleError {
-    code:     int,
+    code:     isize,
     message:  String,
     location: String,
 }
 
-impl fmt::Show for OracleError {
+impl fmt::String for OracleError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!{f, "\n\n  Error code: {}\n  Error message: {}\n  Where: {}\n\n",
                self.code, self.message, self.location}
@@ -1073,16 +1073,15 @@ pub fn oci_server_attach(server_handle: *mut OCIServer,
                          error_handle: *mut OCIError,
                          db: String,
                          mode: OCIMode) -> Result<(), OracleError> {
-    let mode_uint = mode as c_uint;
-    let res = db.with_c_str(|s| unsafe {
+    let res = unsafe {
         OCIServerAttach(
-            server_handle,       // srvhp
-            error_handle,        // errhp
-            s as *const c_uchar, // dblink
-            db.len() as c_int,   // dblink_len
-            mode_uint            // mode
+            server_handle,                                                 // srvhp
+            error_handle,                                                  // errhp
+            CString::from_slice(db.as_bytes()).as_ptr() as *const c_uchar, // dblink
+            db.len() as c_int,                                             // dblink_len
+            mode as c_uint                                                 // mode
         )
-    });
+    };
     match check_error(res, Some(error_handle), "ffi::oci_server_attach") {
         None => Ok(()),
         Some(err) => Err(err),
@@ -1090,24 +1089,20 @@ pub fn oci_server_attach(server_handle: *mut OCIServer,
 }
 
 pub fn oci_error_get(error_handle: *mut OCIError, location: &str) -> OracleError {
-    let errc: *mut int = &mut 0;
+    let errc: *mut isize = &mut 0;
     let buf = String::with_capacity(3072);
-    let msg = buf.with_c_str(|errm| unsafe {
+    unsafe {
         OCIErrorGet(
-            error_handle as *mut c_void,   // hndlp
-            1,                             // recordno
-            ptr::null_mut(),               // sqlstate
-            errc as *mut c_int,            // errcodep
-            errm as *mut c_uchar,          // bufp
-            buf.capacity() as c_uint,      // bufsiz
-            OCIHandleType::Error as c_uint // type
-        );
-        match CString::new(errm, false).as_str() {
-            Some(s) => s.trim().to_string(),
-            None    => String::new(),
-        }
-    });
-    OracleError {code: unsafe { *errc }, message: msg, location: location.to_string()}
+            error_handle as *mut c_void,                                  // hndlp
+            1,                                                            // recordno
+            ptr::null_mut(),                                              // sqlstate
+            errc as *mut c_int,                                           // errcodep
+            CString::from_slice(buf.as_bytes()).as_ptr() as *mut c_uchar, // bufp
+            buf.capacity() as c_uint,                                     // bufsiz
+            OCIHandleType::Error as c_uint                                // type
+        )
+    };
+    OracleError {code: unsafe { *errc }, message: buf, location: location.to_string()}
 }
 
 pub fn oci_attr_set(handle: *mut c_void,
@@ -1117,7 +1112,7 @@ pub fn oci_attr_set(handle: *mut c_void,
                     error_handle: *mut OCIError) -> Result<(), OracleError> {
     let size: c_uint = match attr_type {
         OCIAttribute::Username | OCIAttribute::Password => unsafe {
-            CString::new(value as *const c_char, false).len() as c_uint
+            CString::from_slice(c_str_to_bytes(&(value as *const c_char))).len() as c_uint
         },
         _ => 0,
     };
@@ -1200,21 +1195,19 @@ pub fn oci_stmt_prepare2(service_handle: *mut OCISvcCtx,
                          stmt_text: &String,
                          stmt_hash: &String) -> Result<*mut OCIStmt, OracleError> {
     let mut stmt_handle = ptr::null_mut();
-    let res = stmt_text.with_c_str(|stmt|
-        stmt_hash.with_c_str(|hash| unsafe {
-            OCIStmtPrepare2(
-                service_handle,                        // svchp
-                &mut stmt_handle,                      // stmtp
-                error_handle,                          // errhp
-                stmt as *const c_uchar,                // stmttext
-                stmt_text.len() as c_uint,             // stmt_len
-                hash as *const c_uchar,                // key
-                stmt_hash.len() as c_uint,             // key_len
-                OCISyntax::NtvSyntax as c_uint,        // language
-                OCIStmtPrepare2Mode::Default as c_uint // mode
-            )
-        })
-    );
+    let res = unsafe {
+        OCIStmtPrepare2(
+            service_handle,                                                       // svchp
+            &mut stmt_handle,                                                     // stmtp
+            error_handle,                                                         // errhp
+            CString::from_slice(stmt_text.as_bytes()).as_ptr() as *const c_uchar, // stmttext
+            stmt_text.len() as c_uint,                                            // stmt_len
+            CString::from_slice(stmt_hash.as_bytes()).as_ptr() as *const c_uchar, // key
+            stmt_hash.len() as c_uint,                                            // key_len
+            OCISyntax::NtvSyntax as c_uint,                                       // language
+            OCIStmtPrepare2Mode::Default as c_uint                                // mode
+        )
+    };
     match check_error(res, Some(error_handle), "ffi::oci_stmt_prepare2") {
         None => Ok(stmt_handle),
         Some(err) => Err(err),
@@ -1245,15 +1238,15 @@ pub fn oci_stmt_execute(service_handle: *mut OCISvcCtx,
 pub fn oci_stmt_release(stmt_handle: *mut OCIStmt,
                         error_handle: *mut OCIError,
                         stmt_hash: &String) -> Result<(), OracleError> {
-    let res = stmt_hash.with_c_str(|hash| unsafe {
+    let res = unsafe {
         OCIStmtRelease(
-            stmt_handle,               // stmtp
-            error_handle,              // errhp
-            hash as *const c_uchar,    // key
-            stmt_hash.len() as c_uint, // keylen
-            OCIMode::Default as c_uint // mode
+            stmt_handle,                                                          // stmtp
+            error_handle,                                                         // errhp
+            CString::from_slice(stmt_hash.as_bytes()).as_ptr() as *const c_uchar, // key
+            stmt_hash.len() as c_uint,                                            // keylen
+            OCIMode::Default as c_uint                                            // mode
         )
-    });
+    };
     match check_error(res, Some(error_handle), "ffi::oci_stmt_release") {
         None => Ok(()),
         Some(err) => Err(err),
@@ -1262,7 +1255,7 @@ pub fn oci_stmt_release(stmt_handle: *mut OCIStmt,
 
 pub fn oci_param_get(stmt_handle: *mut OCIStmt,
                      error_handle: *mut OCIError,
-                     position: uint) -> Result<*mut c_void, OracleError> {
+                     position: usize) -> Result<*mut c_void, OracleError> {
     let mut parameter_descriptor = ptr::null_mut();
     let res = unsafe {
         OCIParamGet(
@@ -1281,7 +1274,7 @@ pub fn oci_param_get(stmt_handle: *mut OCIStmt,
 
 pub fn oci_attr_get(attr_handle: *mut c_void,
                     error_handle: *mut OCIError,
-                    attr_type: OCIDescribeAttribute) -> Result<(*mut c_void, int), OracleError> {
+                    attr_type: OCIDescribeAttribute) -> Result<(*mut c_void, isize), OracleError> {
     let attribute = ptr::null_mut();
     let mut attribute_size = 0;
     let res = unsafe {
@@ -1295,7 +1288,7 @@ pub fn oci_attr_get(attr_handle: *mut c_void,
         )
     };
     match check_error(res, Some(error_handle), "ffi::oci_attr_get") {
-        None => Ok((attribute, attribute_size as int)),
+        None => Ok((attribute, attribute_size as isize)),
         Some(err) => Err(err),
     }
 }
@@ -1310,24 +1303,24 @@ pub fn check_error(code: c_int,
     match code {
         0     => None,
         100   => Some(OracleError {
-            code: code as int, message: "No data".to_string(), location: location.to_string()
+            code: code as isize, message: "No data".to_string(), location: location.to_string()
         }),
         -2    => Some(OracleError {
-            code: code as int, message: "Invalid handle".to_string(), location: location.to_string()
+            code: code as isize, message: "Invalid handle".to_string(), location: location.to_string()
         }),
         99    => Some(OracleError {
-            code: code as int, message: "Need data".to_string(), location: location.to_string()
+            code: code as isize, message: "Need data".to_string(), location: location.to_string()
         }),
         -3123 => Some(OracleError {
-            code: code as int, message: "Still executing".to_string(),
+            code: code as isize, message: "Still executing".to_string(),
             location: location.to_string()
         }),
         -1    => Some(by_handle.unwrap_or(OracleError {
-            code: code as int, message: "Error with no details".to_string(),
+            code: code as isize, message: "Error with no details".to_string(),
             location: location.to_string()
         })),
         1     => Some(by_handle.unwrap_or(OracleError {
-            code: code as int, message: "Success with info".to_string(),
+            code: code as isize, message: "Success with info".to_string(),
             location: location.to_string()
         })),
         _     => panic!("Unknown return code"),

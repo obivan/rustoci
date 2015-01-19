@@ -2,6 +2,7 @@ use env;
 use ffi;
 use stmt;
 use libc::c_void;
+use std::ffi::CString;
 
 pub struct Connection {
     pub env:            env::Environment,
@@ -46,18 +47,16 @@ impl Connection {
 
         // Set attribute username in the session context
         try!(
-            username.with_c_str(|u|
-                ffi::oci_attr_set(session_handle as *mut c_void, ffi::OCIHandleType::Session,
-                                  u as *mut c_void, ffi::OCIAttribute::Username, env.error_handle)
-            )
+            ffi::oci_attr_set(session_handle as *mut c_void, ffi::OCIHandleType::Session,
+                              CString::from_slice(username.as_bytes()).as_ptr() as *mut c_void,
+                              ffi::OCIAttribute::Username, env.error_handle)
         );
 
         // Set attribute password in the session context
         try!(
-            password.with_c_str(|p|
-                ffi::oci_attr_set(session_handle as *mut c_void, ffi::OCIHandleType::Session,
-                                  p as *mut c_void, ffi::OCIAttribute::Password, env.error_handle)
-            )
+            ffi::oci_attr_set(session_handle as *mut c_void, ffi::OCIHandleType::Session,
+                              CString::from_slice(password.as_bytes()).as_ptr() as *mut c_void,
+                              ffi::OCIAttribute::Password, env.error_handle)
         );
 
         // Begin session
