@@ -1,5 +1,5 @@
 use libc::{c_void, c_ushort, c_ulong, c_uchar, c_char, c_uint, c_int};
-use std::c_str::CString;
+use std::ffi::{CString, c_str_to_bytes};
 use std::error;
 use std::fmt;
 use std::ptr;
@@ -72,12 +72,12 @@ pub enum OCIMode {
 }
 
 pub struct OracleError {
-    code:     int,
+    code:     isize,
     message:  String,
     location: String,
 }
 
-impl fmt::Show for OracleError {
+impl fmt::String for OracleError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!{f, "\n\n  Error code: {}\n  Error message: {}\n  Where: {}\n\n",
                self.code, self.message, self.location}
@@ -159,6 +159,47 @@ pub enum OCIAttribute {
     // Specifies a password to use for authentication.
     // Attribute Data Type: oratext * [oratext = c_uchar]
     Password = 23,
+}
+
+#[allow(dead_code)]
+enum OCIDescriptorType {
+    Parameter = 53, // OCI_DTYPE_PARAM
+}
+
+#[allow(dead_code)]
+enum OCIDescribeAttribute {
+    DataSize = 1,     // OCI_ATTR_DATA_SIZE maximum size of the data
+    DataType = 2,     // OCI_ATTR_DATA_TYPE the SQL type of the column/argument
+    DisplaySize = 3,  // OCI_ATTR_DISP_SIZE the display size
+    Name = 4,         // OCI_ATTR_NAME      the name of the column/argument
+    Precision = 5,    // OCI_ATTR_PRECISION precision if number type
+    Scale = 6,        // OCI_ATTR_SCALE     scale if number type
+    IsNull = 7,       // OCI_ATTR_IS_NULL   is it null ?
+    CharUsed = 285,   // OCI_ATTR_CHAR_USED char length semantics
+    CharLength = 286, // OCI_ATTR_CHAR_SIZE char length
+}
+
+#[allow(dead_code)]
+enum OCIDataType {
+    Char = 1,                   // SQLT_CHR           (ORANET TYPE) character string
+    Date = 184,                 // SQLT_DATE          ANSI Date
+    Timestamp = 187,            // SQLT_TIMESTAMP     TIMESTAMP
+    TimestampWithTz  = 188,     // SQLT_TIMESTAMP_TZ  TIMESTAMP WITH TIME ZONE
+    TimestampWithLocalTz = 232, // SQLT_TIMESTAMP_LTZ TIMESTAMP WITH LOCAL TZ
+    IntervalYearToMonth = 189,  // SQLT_INTERVAL_YM   INTERVAL YEAR TO MONTH
+    IntervalDayToSecond = 190,  // SQLT_INTERVAL_DS   INTERVAL DAY TO SECOND
+    Clob = 112,                 // SQLT_CLOB          character lob
+    Blob = 113,                 // SQLT_BLOB          binary lob
+    Int = 3,                    // SQLT_INT           (ORANET TYPE) integer
+    Uint = 68,                  // SQLT_UIN           unsigned integer
+    Float = 4,                  // SQLT_FLT           (ORANET TYPE) Floating point number
+    PackedDecimalNumber = 7,    // SQLT_PDN           (ORANET TYPE) Packed Decimal Numeric
+    Binary = 23,                // SQLT_BIN           binary data(DTYBIN)
+    Numeric = 2,                // SQLT_NUM           (ORANET TYPE) oracle numeric
+    NamedObject = 108,          // SQLT_NTY           named object type
+    Ref = 110,                  // SQLT_REF           ref type
+    OCIString = 155,            // SQLT_VST           OCIString type
+    NumericWithLength = 6,      // SQLT_VNU           NUM with preceding length byte
 }
 
 #[link(name = "clntsh")]
@@ -887,8 +928,105 @@ extern "C" {
         //   OCI_DEFAULT
         //   OCI_STRLS_CACHE_DELETE - Only valid for statement caching. The statement is not
         //     kept in the cache anymore.
-        mode: c_uint)
-     -> c_int;
+        mode: c_uint
+    ) -> c_int;
+
+    // This call returns a descriptor of a parameter specified by position in the describe handle
+    // or statement handle. Parameter descriptors are always allocated internally by the OCI
+    // library. They can be freed using OCIDescriptorFree(). For example, if you fetch the same
+    // column metadata for every execution of a statement, then the program leaks memory unless you
+    // explicitly free the parameter descriptor between each call to OCIParamGet().
+    fn OCIParamGet(
+        // hndlp (IN)
+        // A statement handle or describe handle. The OCIParamGet() function returns a
+        // parameter descriptor for this handle.
+        hndlp: *const c_void,
+
+        // htype (IN)
+        // The type of the handle passed in the hndlp parameter. Valid types are:
+        //   OCI_DTYPE_PARAM, for a parameter descriptor
+        //   OCI_HTYPE_COMPLEXOBJECT, for a complex object retrieval handle
+        //   OCI_HTYPE_STMT, for a statement handle
+        htype: c_uint,
+
+        // errhp (IN/OUT)
+        // An error handle that you can pass to OCIErrorGet() for diagnostic information when
+        // there is an error.
+        errhp: *mut OCIError,
+
+        // parmdpp (OUT)
+        // A descriptor of the parameter at the position given in the pos parameter,
+        // of handle type OCI_DTYPE_PARAM.
+        parmdpp: *mut *mut c_void,
+
+        // pos (IN)
+        // Position number in the statement handle or describe handle. A parameter descriptor is
+        // returned for this position.
+        // OCI_ERROR is returned if there are no parameter descriptors for this position.
+        pos: c_uint
+    ) -> c_int;
+
+    // Gets the value of an attribute of a handle.
+    // This call is used to get a particular attribute of a handle. OCI_DTYPE_PARAM is used to do
+    // implicit and explicit describes. The parameter descriptor is also used in direct path
+    // loading. For implicit describes, the parameter descriptor has the column description for
+    // each select list. For explicit describes, the parameter descriptor has the describe
+    // information for each schema object that you are trying to describe. If the top-level
+    // parameter descriptor has an attribute that is itself a descriptor, use OCI_ATTR_PARAM as the
+    // attribute type in the subsequent call to OCIAttrGet() to get the Unicode information in an
+    // environment or statement handle.
+    // 
+    // A function closely related to OCIAttrGet() is OCIDescribeAny(), which is a generic describe
+    // call that describes existing schema objects: tables, views, synonyms, procedures, functions,
+    // packages, sequences, and types. As a result of this call, the describe handle is populated
+    // with the object-specific attributes that can be obtained through an OCIAttrGet() call.
+    // 
+    // Then an OCIParamGet() call on the describe handle returns a parameter descriptor for a
+    // specified position. Parameter positions begin with 1. Calling OCIAttrGet() on the parameter
+    // descriptor returns the specific attributes of a stored procedure or function parameter or a
+    // table column descriptor. These subsequent calls do not need an extra round-trip to the
+    // server because the entire schema object description is cached on the client side by
+    // OCIDescribeAny(). Calling OCIAttrGet() on the describe handle can also return the total
+    // number of positions.
+    // 
+    // In UTF-16 mode, particularly when executing a loop, try to reuse the same pointer variable
+    // corresponding to an attribute and copy the contents to local variables after OCIAttrGet() is
+    // called. If multiple pointers are used for the same attribute, a memory leak can occur.
+    fn OCIAttrGet(
+        // trgthndlp (IN)
+        // Pointer to a handle type. The actual handle can be a statement handle, a session handle,
+        // and so on. When this call is used to get encoding, users are allowed to check against
+        // either an environment or statement handle.
+        trgthndlp: *const c_void,
+
+        // trghndltyp (IN)
+        // The handle type. Valid types are:
+        //   OCI_DTYPE_PARAM, for a parameter descriptor
+        //   OCI_HTYPE_STMT, for a statement handle
+        //   Any handle type in OCIHandleType enum or any descriptor in OCIDescriptorType enum.
+        trghndltyp: c_uint,
+
+        // attributep (OUT)
+        // Pointer to the storage for an attribute value. Is in the encoding specified by the
+        // charset parameter of a previous call to OCIEnvNlsCreate().
+        attributep: *mut c_void,
+
+        // sizep (OUT)
+        // The size of the attribute value, always in bytes because attributep is a void pointer.
+        // This can be passed as NULL for most attributes because the sizes of non-string
+        // attributes are already known by the OCI library. For text* parameters, a pointer to a
+        // ub4 must be passed in to get the length of the string.
+        sizep: *mut c_uint,
+
+        // attrtype (IN)
+        // The type of attribute being retrieved.
+        attrtype: c_uint,
+
+        // errhp (IN/OUT)
+        // An error handle that you can pass to OCIErrorGet() for diagnostic information when
+        // there is an error.
+        errhp: *mut OCIError
+    ) -> c_int;
 }
 
 pub fn oci_env_nls_create(mode: OCIMode) -> Result<*mut OCIEnv, OracleError> {
@@ -935,15 +1073,15 @@ pub fn oci_server_attach(server_handle: *mut OCIServer,
                          error_handle: *mut OCIError,
                          db: String,
                          mode: OCIMode) -> Result<(), OracleError> {
-    let res = db.with_c_str(|s| unsafe {
+    let res = unsafe {
         OCIServerAttach(
-            server_handle,       // srvhp
-            error_handle,        // errhp
-            s as *const c_uchar, // dblink
-            db.len() as c_int,   // dblink_len
-            mode as c_uint       // mode
+            server_handle,                                                 // srvhp
+            error_handle,                                                  // errhp
+            CString::from_slice(db.as_bytes()).as_ptr() as *const c_uchar, // dblink
+            db.len() as c_int,                                             // dblink_len
+            mode as c_uint                                                 // mode
         )
-    });
+    };
     match check_error(res, Some(error_handle), "ffi::oci_server_attach") {
         None => Ok(()),
         Some(err) => Err(err),
@@ -951,24 +1089,20 @@ pub fn oci_server_attach(server_handle: *mut OCIServer,
 }
 
 pub fn oci_error_get(error_handle: *mut OCIError, location: &str) -> OracleError {
-    let errc: *mut int = &mut 0;
+    let errc: *mut isize = &mut 0;
     let buf = String::with_capacity(3072);
-    let msg = buf.with_c_str(|errm| unsafe {
+    unsafe {
         OCIErrorGet(
-            error_handle as *mut c_void,   // hndlp
-            1,                             // recordno
-            ptr::null_mut(),               // sqlstate
-            errc as *mut c_int,            // errcodep
-            errm as *mut c_uchar,          // bufp
-            buf.capacity() as c_uint,      // bufsiz
-            OCIHandleType::Error as c_uint // type
-        );
-        match CString::new(errm, false).as_str() {
-            Some(s) => s.trim().to_string(),
-            None    => String::new(),
-        }
-    });
-    OracleError {code: unsafe { *errc }, message: msg, location: location.to_string()}
+            error_handle as *mut c_void,                                  // hndlp
+            1,                                                            // recordno
+            ptr::null_mut(),                                              // sqlstate
+            errc as *mut c_int,                                           // errcodep
+            CString::from_slice(buf.as_bytes()).as_ptr() as *mut c_uchar, // bufp
+            buf.capacity() as c_uint,                                     // bufsiz
+            OCIHandleType::Error as c_uint                                // type
+        )
+    };
+    OracleError {code: unsafe { *errc }, message: buf, location: location.to_string()}
 }
 
 pub fn oci_attr_set(handle: *mut c_void,
@@ -978,7 +1112,7 @@ pub fn oci_attr_set(handle: *mut c_void,
                     error_handle: *mut OCIError) -> Result<(), OracleError> {
     let size: c_uint = match attr_type {
         OCIAttribute::Username | OCIAttribute::Password => unsafe {
-            CString::new(value as *const c_char, false).len() as c_uint
+            CString::from_slice(c_str_to_bytes(&(value as *const c_char))).len() as c_uint
         },
         _ => 0,
     };
@@ -1061,21 +1195,19 @@ pub fn oci_stmt_prepare2(service_handle: *mut OCISvcCtx,
                          stmt_text: &String,
                          stmt_hash: &String) -> Result<*mut OCIStmt, OracleError> {
     let mut stmt_handle = ptr::null_mut();
-    let res = stmt_text.with_c_str(|stmt|
-        stmt_hash.with_c_str(|hash| unsafe {
-            OCIStmtPrepare2(
-                service_handle,                        // svchp
-                &mut stmt_handle,                      // stmtp
-                error_handle,                          // errhp
-                stmt as *const c_uchar,                // stmttext
-                stmt_text.len() as c_uint,             // stmt_len
-                hash as *const c_uchar,                // key
-                stmt_hash.len() as c_uint,             // key_len
-                OCISyntax::NtvSyntax as c_uint,        // language
-                OCIStmtPrepare2Mode::Default as c_uint // mode
-            )
-        })
-    );
+    let res = unsafe {
+        OCIStmtPrepare2(
+            service_handle,                                                       // svchp
+            &mut stmt_handle,                                                     // stmtp
+            error_handle,                                                         // errhp
+            CString::from_slice(stmt_text.as_bytes()).as_ptr() as *const c_uchar, // stmttext
+            stmt_text.len() as c_uint,                                            // stmt_len
+            CString::from_slice(stmt_hash.as_bytes()).as_ptr() as *const c_uchar, // key
+            stmt_hash.len() as c_uint,                                            // key_len
+            OCISyntax::NtvSyntax as c_uint,                                       // language
+            OCIStmtPrepare2Mode::Default as c_uint                                // mode
+        )
+    };
     match check_error(res, Some(error_handle), "ffi::oci_stmt_prepare2") {
         None => Ok(stmt_handle),
         Some(err) => Err(err),
@@ -1106,17 +1238,57 @@ pub fn oci_stmt_execute(service_handle: *mut OCISvcCtx,
 pub fn oci_stmt_release(stmt_handle: *mut OCIStmt,
                         error_handle: *mut OCIError,
                         stmt_hash: &String) -> Result<(), OracleError> {
-    let res = stmt_hash.with_c_str(|hash| unsafe {
+    let res = unsafe {
         OCIStmtRelease(
-            stmt_handle,               // stmtp
-            error_handle,              // errhp
-            hash as *const c_uchar,    // key
-            stmt_hash.len() as c_uint, // keylen
-            OCIMode::Default as c_uint // mode
+            stmt_handle,                                                          // stmtp
+            error_handle,                                                         // errhp
+            CString::from_slice(stmt_hash.as_bytes()).as_ptr() as *const c_uchar, // key
+            stmt_hash.len() as c_uint,                                            // keylen
+            OCIMode::Default as c_uint                                            // mode
         )
-    });
+    };
     match check_error(res, Some(error_handle), "ffi::oci_stmt_release") {
         None => Ok(()),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_param_get(stmt_handle: *mut OCIStmt,
+                     error_handle: *mut OCIError,
+                     position: usize) -> Result<*mut c_void, OracleError> {
+    let mut parameter_descriptor = ptr::null_mut();
+    let res = unsafe {
+        OCIParamGet(
+            stmt_handle as *const _,            // hndlp
+            OCIHandleType::Statement as c_uint, // htype
+            error_handle,                       // errhp
+            &mut parameter_descriptor,          // parmdpp
+            position as c_uint                  // pos
+        )
+    };
+    match check_error(res, Some(error_handle), "ffi::oci_param_get") {
+        None => Ok(parameter_descriptor),
+        Some(err) => Err(err),
+    }
+}
+
+pub fn oci_attr_get(attr_handle: *mut c_void,
+                    error_handle: *mut OCIError,
+                    attr_type: OCIDescribeAttribute) -> Result<(*mut c_void, isize), OracleError> {
+    let attribute = ptr::null_mut();
+    let mut attribute_size = 0;
+    let res = unsafe {
+        OCIAttrGet(
+            attr_handle as *const _,                // trgthndlp
+            OCIDescriptorType::Parameter as c_uint, // trghndltyp
+            attribute,                              // attributep
+            &mut attribute_size,                    // sizep
+            attr_type as c_uint,                    // attrtype
+            error_handle                            // errhp
+        )
+    };
+    match check_error(res, Some(error_handle), "ffi::oci_attr_get") {
+        None => Ok((attribute, attribute_size as isize)),
         Some(err) => Err(err),
     }
 }
@@ -1131,24 +1303,24 @@ pub fn check_error(code: c_int,
     match code {
         0     => None,
         100   => Some(OracleError {
-            code: code as int, message: "No data".to_string(), location: location.to_string()
+            code: code as isize, message: "No data".to_string(), location: location.to_string()
         }),
         -2    => Some(OracleError {
-            code: code as int, message: "Invalid handle".to_string(), location: location.to_string()
+            code: code as isize, message: "Invalid handle".to_string(), location: location.to_string()
         }),
         99    => Some(OracleError {
-            code: code as int, message: "Need data".to_string(), location: location.to_string()
+            code: code as isize, message: "Need data".to_string(), location: location.to_string()
         }),
         -3123 => Some(OracleError {
-            code: code as int, message: "Still executing".to_string(),
+            code: code as isize, message: "Still executing".to_string(),
             location: location.to_string()
         }),
         -1    => Some(by_handle.unwrap_or(OracleError {
-            code: code as int, message: "Error with no details".to_string(),
+            code: code as isize, message: "Error with no details".to_string(),
             location: location.to_string()
         })),
         1     => Some(by_handle.unwrap_or(OracleError {
-            code: code as int, message: "Success with info".to_string(),
+            code: code as isize, message: "Success with info".to_string(),
             location: location.to_string()
         })),
         _     => panic!("Unknown return code"),

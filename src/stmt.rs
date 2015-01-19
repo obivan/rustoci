@@ -1,6 +1,6 @@
 use ffi;
 use conn;
-use std::hash;
+use std::hash::{hash, SipHasher};
 
 pub struct Statement {
     conn:        conn::Connection,
@@ -10,7 +10,7 @@ pub struct Statement {
 
 impl Statement {
     pub fn new(conn: conn::Connection, stmt_text: String) -> Result<Statement, ffi::OracleError> {
-        let stmt_hash = hash::hash(&stmt_text).to_string();
+        let stmt_hash = hash::<_, SipHasher>(&stmt_text).to_string();
         let stmt_handle = try!(
             ffi::oci_stmt_prepare2(conn.service_handle, conn.env.error_handle,
                                    &stmt_text, &stmt_hash)
