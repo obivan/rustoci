@@ -77,7 +77,7 @@ pub struct OracleError {
     location: String,
 }
 
-impl fmt::String for OracleError {
+impl fmt::Display for OracleError {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
         write!{f, "\n\n  Error code: {}\n  Error message: {}\n  Where: {}\n\n",
                self.code, self.message, self.location}
@@ -87,10 +87,6 @@ impl fmt::String for OracleError {
 impl error::Error for OracleError {
     fn description(&self) -> &str {
         "Oracle error"
-    }
-
-    fn detail(&self) -> Option<String> {
-        Some(format!("{}", self))
     }
 }
 
