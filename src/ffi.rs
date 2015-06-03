@@ -1,5 +1,5 @@
 use libc::{c_void, c_ushort, c_ulong, c_uchar, c_char, c_uint, c_int};
-use std::ffi::{CString, c_str_to_bytes};
+use std::ffi::CStr;
 use std::error;
 use std::fmt;
 use std::ptr;
@@ -71,6 +71,7 @@ pub enum OCIMode {
     EnableNLSValidation = 0x01000000,
 }
 
+#[derive(Debug)]
 pub struct OracleError {
     code:     isize,
     message:  String,
@@ -163,7 +164,7 @@ enum OCIDescriptorType {
 }
 
 #[allow(dead_code)]
-enum OCIDescribeAttribute {
+pub enum OCIDescribeAttribute {
     DataSize = 1,     // OCI_ATTR_DATA_SIZE maximum size of the data
     DataType = 2,     // OCI_ATTR_DATA_TYPE the SQL type of the column/argument
     DisplaySize = 3,  // OCI_ATTR_DISP_SIZE the display size
@@ -1073,7 +1074,7 @@ pub fn oci_server_attach(server_handle: *mut OCIServer,
         OCIServerAttach(
             server_handle,                                                 // srvhp
             error_handle,                                                  // errhp
-            CString::from_slice(db.as_bytes()).as_ptr() as *const c_uchar, // dblink
+            db.as_ptr() as *const c_uchar,                                 // dblink
             db.len() as c_int,                                             // dblink_len
             mode as c_uint                                                 // mode
         )
@@ -1093,7 +1094,7 @@ pub fn oci_error_get(error_handle: *mut OCIError, location: &str) -> OracleError
             1,                                                            // recordno
             ptr::null_mut(),                                              // sqlstate
             errc as *mut c_int,                                           // errcodep
-            CString::from_slice(buf.as_bytes()).as_ptr() as *mut c_uchar, // bufp
+            buf.as_ptr() as *mut c_uchar,                                 // bufp
             buf.capacity() as c_uint,                                     // bufsiz
             OCIHandleType::Error as c_uint                                // type
         )
@@ -1108,7 +1109,7 @@ pub fn oci_attr_set(handle: *mut c_void,
                     error_handle: *mut OCIError) -> Result<(), OracleError> {
     let size: c_uint = match attr_type {
         OCIAttribute::Username | OCIAttribute::Password => unsafe {
-            CString::from_slice(c_str_to_bytes(&(value as *const c_char))).len() as c_uint
+            CStr::from_ptr(value as *const c_char).to_bytes().len() as c_uint
         },
         _ => 0,
     };
@@ -1196,9 +1197,9 @@ pub fn oci_stmt_prepare2(service_handle: *mut OCISvcCtx,
             service_handle,                                                       // svchp
             &mut stmt_handle,                                                     // stmtp
             error_handle,                                                         // errhp
-            CString::from_slice(stmt_text.as_bytes()).as_ptr() as *const c_uchar, // stmttext
+            stmt_text.as_ptr(),
             stmt_text.len() as c_uint,                                            // stmt_len
-            CString::from_slice(stmt_hash.as_bytes()).as_ptr() as *const c_uchar, // key
+            stmt_hash.as_ptr(),
             stmt_hash.len() as c_uint,                                            // key_len
             OCISyntax::NtvSyntax as c_uint,                                       // language
             OCIStmtPrepare2Mode::Default as c_uint                                // mode
@@ -1238,7 +1239,7 @@ pub fn oci_stmt_release(stmt_handle: *mut OCIStmt,
         OCIStmtRelease(
             stmt_handle,                                                          // stmtp
             error_handle,                                                         // errhp
-            CString::from_slice(stmt_hash.as_bytes()).as_ptr() as *const c_uchar, // key
+            stmt_hash.as_ptr(),
             stmt_hash.len() as c_uint,                                            // keylen
             OCIMode::Default as c_uint                                            // mode
         )
