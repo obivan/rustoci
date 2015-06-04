@@ -19,8 +19,7 @@ fn main() {
     let db = "ehqe".to_string();
 
     Connection::new(user, pass, db)
-        .and_then(|c| c.new_statement())
-        .and_then(|s| s.prepare("select 1 from dual".to_string()))
+        .and_then(|c| c.new_statement("select 1 from dual".to_string()))
         .and_then(|s| s.execute())
         .ok().expect("Cannot execute");
 
