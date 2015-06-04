@@ -1,9 +1,7 @@
 [package]
-
 name = "rustoci"
-version = "0.0.1"
+version = "0.1.0"
 authors = ["Vadim Komarov <dotvad@gmail.com>"]
 
-[dependencies]
-
-libc = "0.1.8"
+[dependencies.rustoci_ffi]
+git = "https://github.com/obivan/rustoci_ffi.git"
