@@ -17,24 +17,22 @@ impl Connection {
         let env = try!(env::Environment::new());
 
         // Allocate the server handle
-        let server_handle = try!(
-            rustoci_ffi::oci_handle_alloc(env.handle, rustoci_ffi::OCIHandleType::Server)
-        ) as *mut rustoci_ffi::OCIServer;
+        let server_handle =
+            try!(rustoci_ffi::oci_handle_alloc(env.handle,
+                 rustoci_ffi::OCIHandleType::Server)) as *mut rustoci_ffi::OCIServer;
 
         // Allocate the service context handle
-        let service_handle = try!(
-            rustoci_ffi::oci_handle_alloc(env.handle, rustoci_ffi::OCIHandleType::Service)
-        ) as *mut rustoci_ffi::OCISvcCtx;
+        let service_handle =
+            try!(rustoci_ffi::oci_handle_alloc(env.handle,
+                 rustoci_ffi::OCIHandleType::Service)) as *mut rustoci_ffi::OCISvcCtx;
 
         // Allocate the session handle
-        let session_handle = try!(
-            rustoci_ffi::oci_handle_alloc(env.handle, rustoci_ffi::OCIHandleType::Session)
-        ) as *mut rustoci_ffi::OCISession;
+        let session_handle =
+            try!(rustoci_ffi::oci_handle_alloc(env.handle,
+                 rustoci_ffi::OCIHandleType::Session)) as *mut rustoci_ffi::OCISession;
 
-        try!(
-            rustoci_ffi::oci_server_attach(server_handle, env.error_handle,
-                                           database, rustoci_ffi::OCIMode::Default)
-        );
+        try!(rustoci_ffi::oci_server_attach(server_handle, env.error_handle,
+                                            database, rustoci_ffi::OCIMode::Default));
 
         // Set attribute server context in the service context
         try!(rustoci_ffi::oci_attr_set(service_handle as *mut rustoci_ffi::c_void,

@@ -8,9 +8,9 @@ pub struct Environment {
 impl Environment {
     pub fn new() -> Result<Environment, rustoci_ffi::OracleError> {
         let handle = try!(rustoci_ffi::oci_env_nls_create(rustoci_ffi::OCIMode::Default));
-        let error_handle = try!(
-            rustoci_ffi::oci_handle_alloc(handle, rustoci_ffi::OCIHandleType::Error)
-        ) as *mut rustoci_ffi::OCIError;
+        let error_handle =
+            try!(rustoci_ffi::oci_handle_alloc(handle,
+                 rustoci_ffi::OCIHandleType::Error)) as *mut rustoci_ffi::OCIError;
         Ok(Environment {handle: handle, error_handle: error_handle})
     }
 }
