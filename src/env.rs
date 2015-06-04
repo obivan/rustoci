@@ -17,9 +17,11 @@ impl Environment {
 
 impl Drop for Environment {
     fn drop(&mut self) {
-        rustoci_ffi::oci_handle_free(self.error_handle as *mut rustoci_ffi::c_void, rustoci_ffi::OCIHandleType::Error)
+        rustoci_ffi::oci_handle_free(self.error_handle as *mut rustoci_ffi::c_void,
+                                     rustoci_ffi::OCIHandleType::Error)
             .ok().expect("oci_handle_free (error_handle) failed");
-        rustoci_ffi::oci_handle_free(self.handle as *mut rustoci_ffi::c_void, rustoci_ffi::OCIHandleType::Environment)
+        rustoci_ffi::oci_handle_free(self.handle as *mut rustoci_ffi::c_void,
+                                     rustoci_ffi::OCIHandleType::Environment)
             .ok().expect("oci_handle_free (environment handle) failed");
     }
 }
