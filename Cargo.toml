@@ -4,4 +4,5 @@ version = "0.1.0"
 authors = ["Vadim Komarov <dotvad@gmail.com>"]
 
 [dependencies.rustoci_ffi]
-git = "https://github.com/obivan/rustoci_ffi.git"
+#git = "https://github.com/obivan/rustoci_ffi.git"
+path = "../rustoci_ffi"
